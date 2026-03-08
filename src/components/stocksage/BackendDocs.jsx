@@ -5,15 +5,14 @@ const FILES = [
   {
     name: "requirements.txt",
     lang: "text",
-    content: `fastapi==0.111.0
-uvicorn[standard]==0.29.0
-scikit-learn==1.4.2
-pandas==2.2.2
-numpy==1.26.4
-requests==2.31.0
-python-dotenv==1.0.1
-redis==5.0.4
-diskcache==5.6.3
+    content: `fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+scikit-learn>=1.5.0
+pandas>=2.2.0
+numpy>=2.0.0
+requests>=2.31.0
+python-dotenv>=1.0.1
+diskcache>=5.6.3
 `,
   },
   {
