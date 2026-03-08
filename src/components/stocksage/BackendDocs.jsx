@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Code2, ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
+import { Code2, ChevronDown, ChevronRight, Copy, Check, Download } from "lucide-react";
 
 const FILES = [
   {
