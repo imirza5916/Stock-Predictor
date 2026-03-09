@@ -177,9 +177,9 @@ export default function Home() {
         {!prediction && !loading && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {features.map(({ icon: Icon, title, desc, bg, text }) => (
-              <div key={title} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-                <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center mb-3`}>
-                  <Icon className={`w-5 h-5 ${text}`} />
+              <div key={title} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md hover:border-slate-200 transition-all group">
+                <div className={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center mb-3 group-hover:scale-105 transition-transform`}>
+                  <Icon className={`w-5 h-5 ${text}`} aria-hidden="true" />
                 </div>
                 <h3 className="font-semibold text-slate-700 mb-1">{title}</h3>
                 <p className="text-slate-400 text-sm leading-relaxed">{desc}</p>
