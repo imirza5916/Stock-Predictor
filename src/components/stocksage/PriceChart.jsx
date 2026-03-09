@@ -18,7 +18,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
-export default function PriceChart({ chartData, prediction }) {
+export default function PriceChart({ chartData, prediction, range, ranges, onRangeChange, loading }) {
   const data = useMemo(() => {
     if (!chartData?.length) return [];
     const mapped = chartData
