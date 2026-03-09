@@ -133,7 +133,7 @@ export default function Watchlist({ onSelect, fetchPrediction }) {
         <Input
           value={newTicker}
           onChange={e => setNewTicker(e.target.value.toUpperCase())}
-          placeholder="Add ticker (AAPL, TSLA...)"
+          placeholder="Add ticker"
           className="font-mono text-sm h-9"
           disabled={adding || refreshing}
           maxLength={10}
