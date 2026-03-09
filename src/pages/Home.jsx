@@ -125,6 +125,13 @@ export default function Home() {
                 <Sparkles className="w-3.5 h-3.5 text-violet-400" aria-hidden="true" /> AI-powered stock predictions
               </p>
             </div>
+            <a
+              href={createPageUrl("Dashboard")}
+              className="ml-auto flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-3 py-1.5 rounded-xl transition-all"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              Dashboard
+            </a>
           </div>
           <TickerInput onPredict={handlePredict} loading={loading} />
           {history.length > 0 && (
