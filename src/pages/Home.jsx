@@ -172,6 +172,8 @@ export default function Home() {
           </>
         )}
 
+        <Watchlist onSelect={handlePredict} fetchPrediction={fetchPrediction} />
+
         {!prediction && !loading && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {features.map(({ icon: Icon, title, desc, bg, text }) => (
