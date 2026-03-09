@@ -26,7 +26,7 @@ async function fetchPrediction(ticker, range = RANGES[3]) {
   const result = await base44.integrations.Core.InvokeLLM({
     prompt: `You are a professional stock market analyst with access to real market data. Analyze the stock ticker "${ticker}" and provide a prediction for tomorrow's closing price.
 
-IMPORTANT: You MUST include realistic chart_data with 30 daily data points ending today (${new Date().toISOString().split("T")[0]}). Each data point MUST include: date (YYYY-MM-DD), close (number), volume (number, realistic trading volume like 50000000), ma5 (5-day moving average), ma20 (20-day moving average). Use real approximate prices for this stock.
+CRITICAL: You MUST include chart_data with ${range.desc}. Each point MUST have ALL these fields populated with real numbers: date (string), close (number), volume (number - use realistic volume like 30000000 to 100000000 for large caps), ma5 (number), ma20 (number). Do NOT omit volume. Use realistic approximate historical prices for this stock.
 
 Return ONLY valid JSON.`,
     add_context_from_internet: true,
