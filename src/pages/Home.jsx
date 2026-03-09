@@ -10,7 +10,7 @@ import RecentPredictions from "../components/stocksage/RecentPredictions";
 import { base44 } from "@/api/base44Client";
 import { AlertCircle, Activity, Server } from "lucide-react";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const API_BASE = import.meta.env.VITE_API_BASE || localStorage.getItem("stocksage_api_base") || "";
 
 async function callBackend(ticker) {
   const [predRes, chartRes] = await Promise.all([
