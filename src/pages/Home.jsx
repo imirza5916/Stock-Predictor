@@ -62,6 +62,9 @@ export default function Home() {
   const [prediction, setPrediction] = useState(null);
   const [chartData, setChartData] = useState([]);
   const [history, setHistory] = useState([]);
+  const handleRemove = useCallback((ticker) => {
+    setHistory((prev) => prev.filter((p) => p.ticker !== ticker));
+  }, []);
 
   const handlePredict = useCallback(async (ticker) => {
     setLoading(true);
