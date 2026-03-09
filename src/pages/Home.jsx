@@ -9,6 +9,7 @@ import { AlertCircle, TrendingUp, BarChart2, Brain, Sparkles } from "lucide-reac
 import PDFReport from "../components/stocksage/PDFReport";
 
 const RANGES = [
+  { label: "1D", key: "1d",      points: null, yahooRange: "1d" },
   { label: "1W", key: "1week",   points: 7  },
   { label: "1M", key: "1month",  points: 30 },
   { label: "3M", key: "3months", points: 90 },
