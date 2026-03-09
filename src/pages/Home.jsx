@@ -20,7 +20,7 @@ async function fetchPrediction(ticker, range = RANGES[3]) {
   const predDate = tomorrow.toISOString().split("T")[0];
 
   const result = await base44.integrations.Core.InvokeLLM({
-    prompt: `You are a professional stock market analyst. Analyze the stock ticker "${ticker}" and provide a prediction for tomorrow's closing price. IMPORTANT: Use the exact, correct company name for this ticker symbol as it is officially listed on stock exchanges. Do not guess or invent company names.
+    prompt: `You are a professional stock market analyst. Analyze the stock ticker "${ticker}" as listed on the NASDAQ or NYSE stock exchanges only. Use the exact, correct company name as officially listed on NASDAQ or NYSE. For example, IREN is "Iris Energy Limited" on NASDAQ. Do not reference companies from other exchanges.
 
 CRITICAL: You MUST include chart_data with exactly 90 daily data points (one per trading day) going back from today. Each point MUST have ALL these fields: date (YYYY-MM-DD string), close (number), volume (number - realistic like 30000000-100000000 for large caps), ma5 (5-day moving average), ma20 (20-day moving average). Use realistic historical prices. Keep values concise (2 decimal places max).
 
