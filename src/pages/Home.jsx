@@ -22,7 +22,7 @@ async function fetchPrediction(ticker) {
   const predDate = tomorrow.toISOString().split("T")[0];
 
   // Step 1: Fetch real price data from Yahoo Finance
-  const stockRes = await base44.functions.invoke("stockData", { ticker });
+  const stockRes = await base44.functions.invoke("stockData", { ticker, range: activeRange?.key });
   const { chartData, lastClose, companyName } = stockRes.data;
 
   // Step 2: Ask LLM for analysis only (no chart data needed from LLM)
