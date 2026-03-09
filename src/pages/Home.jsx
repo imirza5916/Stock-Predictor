@@ -13,26 +13,35 @@ const RANGES = [
   { label: "3M", key: "3months", points: 90 },
 ];
 
-async function fetchPrediction(ticker, range = RANGES[3]) {
+async function fetchPrediction(ticker) {
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const predDate = tomorrow.toISOString().split("T")[0];
 
+  // Step 1: Fetch real price data from Yahoo Finance
+  const stockRes = await base44.functions.invoke("stockData", { ticker });
+  const { chartData, lastClose, companyName } = stockRes.data;
+
+  // Step 2: Ask LLM for analysis only (no chart data needed from LLM)
   const result = await base44.integrations.Core.InvokeLLM({
-    prompt: `You are a professional stock market analyst. Analyze the stock ticker "${ticker}" as listed on the NASDAQ or NYSE stock exchanges only. Use the exact, correct company name as officially listed on NASDAQ or NYSE. For example, IREN is "Iris Energy Limited" on NASDAQ. Do not reference companies from other exchanges.
+    prompt: `You are a professional stock market analyst. The stock ticker is "${ticker}" (${companyName}) listed on NASDAQ or NYSE.
+The current/last close price is $${lastClose}.
 
-CRITICAL: You MUST include chart_data with exactly 90 daily data points (one per trading day) going back from today. Each point MUST have ALL these fields: date (YYYY-MM-DD string), close (number), volume (number - realistic like 30000000-100000000 for large caps), ma5 (5-day moving average), ma20 (20-day moving average). Use realistic historical prices. Keep values concise (2 decimal places max).
+Based on this real price and your knowledge of this stock, provide:
+- A predicted next-day closing price (must be realistic relative to the current price of $${lastClose})
+- A trading signal (BUY, SELL, or HOLD)
+- Confidence level
+- 7-day and 30-day price targets
+- Support and resistance levels
+- A brief analysis summary
+- Key factors influencing the prediction
 
-Return ONLY valid JSON.`,
+All prices MUST be realistic and proportional to the current price of $${lastClose}.`,
 
     response_json_schema: {
       type: "object",
       properties: {
-        ticker: { type: "string" },
-        company_name: { type: "string" },
-        current_price: { type: "number" },
-        last_close: { type: "number" },
         predicted_next_close: { type: "number" },
         predicted_return_pct: { type: "number" },
         signal: { type: "string", enum: ["BUY", "SELL", "HOLD"] },
@@ -41,29 +50,22 @@ Return ONLY valid JSON.`,
         price_target_30d: { type: "number" },
         support_level: { type: "number" },
         resistance_level: { type: "number" },
-        prediction_date: { type: "string" },
         analysis_summary: { type: "string" },
         key_factors: { type: "array", items: { type: "string" } },
-        chart_data: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              date: { type: "string" },
-              close: { type: "number" },
-              volume: { type: "number" },
-              ma5: { type: "number" },
-              ma20: { type: "number" }
-            }
-          }
-        }
       },
-      required: ["ticker", "current_price", "predicted_next_close", "predicted_return_pct", "signal", "prediction_date", "analysis_summary"]
+      required: ["predicted_next_close", "predicted_return_pct", "signal", "analysis_summary"]
     }
   });
 
-  if (!result.prediction_date) result.prediction_date = predDate;
-  return result;
+  return {
+    ...result,
+    ticker: ticker.toUpperCase(),
+    company_name: companyName,
+    current_price: lastClose,
+    last_close: lastClose,
+    prediction_date: predDate,
+    chart_data: chartData,
+  };
 }
 
 export default function Home() {
