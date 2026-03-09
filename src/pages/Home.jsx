@@ -114,11 +114,18 @@ export default function Home() {
               {backendOnline === null ? "Backend: not tested" :
                backendOnline ? "Backend: connected" : "Demo mode (no backend)"}
             </div>
-            {!API_BASE && (
-              <p className="text-white/30 text-xs">
-                Set <code className="text-white/50">VITE_API_BASE</code> to connect your Python backend
-              </p>
-            )}
+            <form onSubmit={(e) => { e.preventDefault(); localStorage.setItem("stocksage_api_base", apiUrlInput); setApiUrl(apiUrlInput); window.location.reload(); }} className="flex items-center gap-2">
+              <input
+                value={apiUrlInput}
+                onChange={(e) => setApiUrlInput(e.target.value)}
+                placeholder="Paste ngrok URL, e.g. https://abc.ngrok-free.app"
+                className="text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white/70 placeholder-white/20 w-72 focus:outline-none focus:border-emerald-500/50"
+              />
+              <button type="submit" className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 transition-all">
+                Save
+              </button>
+              {apiUrl && <button type="button" onClick={() => { localStorage.removeItem("stocksage_api_base"); setApiUrl(""); setApiUrlInput(""); window.location.reload(); }} className="text-xs text-white/20 hover:text-white/40">Clear</button>}
+            </form>
           </div>
 
           <div className="mt-4">
