@@ -80,14 +80,13 @@ export default function Home() {
     setHistory((prev) => prev.filter((p) => p.ticker !== ticker));
   }, []);
 
-  const handlePredict = useCallback(async (ticker, overrideRange) => {
-    const activeRange = overrideRange || range;
+  const handlePredict = useCallback(async (ticker) => {
     setLoading(true);
     setError(null);
     setPrediction(null);
     setChartData([]);
     setCurrentTicker(ticker);
-    const result = await fetchPrediction(ticker, activeRange);
+    const result = await fetchPrediction(ticker);
     setPrediction(result);
     setChartData(result.chart_data || []);
     setHistory((prev) => [result, ...prev.filter((p) => p.ticker !== ticker)].slice(0, 8));
