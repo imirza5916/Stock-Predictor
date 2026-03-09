@@ -6,6 +6,7 @@ import PriceChart from "../components/stocksage/PriceChart";
 import AIAnalysis from "../components/stocksage/AIAnalysis";
 import RecentPredictions from "../components/stocksage/RecentPredictions";
 import { AlertCircle, TrendingUp, BarChart2, Brain, Sparkles } from "lucide-react";
+import PDFReport from "../components/stocksage/PDFReport";
 
 const RANGES = [
   { label: "1W", key: "1week",   points: 7  },
