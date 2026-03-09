@@ -7,7 +7,17 @@ import AIAnalysis from "../components/stocksage/AIAnalysis";
 import RecentPredictions from "../components/stocksage/RecentPredictions";
 import { AlertCircle, TrendingUp, BarChart2, Brain, Sparkles } from "lucide-react";
 
-async function fetchPrediction(ticker) {
+const RANGES = [
+  { label: "1H", key: "1hour", desc: "intraday data points for the last 1 hour (5-minute intervals, 12 points)" },
+  { label: "1D", key: "1day",  desc: "intraday data points for today (30-minute intervals, ~16 points)" },
+  { label: "1W", key: "1week", desc: "daily data points for the last 7 days (7 points)" },
+  { label: "1M", key: "1month", desc: "daily data points for the last 30 days (30 points)" },
+  { label: "3M", key: "3months", desc: "weekly data points for the last 3 months (12 points)" },
+  { label: "1Y", key: "1year", desc: "weekly data points for the last 12 months (52 points)" },
+  { label: "5Y", key: "5years", desc: "monthly data points for the last 5 years (60 points)" },
+];
+
+async function fetchPrediction(ticker, range = RANGES[3]) {
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
