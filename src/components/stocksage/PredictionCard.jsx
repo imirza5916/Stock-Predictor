@@ -1,54 +1,94 @@
-import { TrendingUp, TrendingDown, Minus, AlertCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Calendar, Target, Shield } from "lucide-react";
 
 const signalConfig = {
-  BUY:  { icon: TrendingUp,   color: "text-emerald-400", bg: "bg-emerald-500/20 border-emerald-500/40", label: "BUY"  },
-  SELL: { icon: TrendingDown, color: "text-red-400",     bg: "bg-red-500/20 border-red-500/40",         label: "SELL" },
-  HOLD: { icon: Minus,        color: "text-yellow-400",  bg: "bg-yellow-500/20 border-yellow-500/40",   label: "HOLD" },
+  BUY:  { icon: TrendingUp,   textColor: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", badge: "bg-emerald-100 text-emerald-700", label: "BUY"  },
+  SELL: { icon: TrendingDown, textColor: "text-red-700",     bg: "bg-red-50",     border: "border-red-200",     badge: "bg-red-100 text-red-700",         label: "SELL" },
+  HOLD: { icon: Minus,        textColor: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-200",   badge: "bg-amber-100 text-amber-700",     label: "HOLD" },
 };
+
+const confidenceColor = { HIGH: "text-emerald-600 bg-emerald-50", MEDIUM: "text-amber-600 bg-amber-50", LOW: "text-red-600 bg-red-50" };
 
 export default function PredictionCard({ data }) {
   const cfg = signalConfig[data.signal] || signalConfig.HOLD;
   const Icon = cfg.icon;
-  const pct = data.predicted_return != null ? (data.predicted_return * 100).toFixed(2) : null;
-  const isUp = data.predicted_return > 0;
+  const pct = data.predicted_return_pct != null ? Number(data.predicted_return_pct).toFixed(2) : null;
+  const isUp = Number(data.predicted_return_pct) > 0;
 
   return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className={`${cfg.bg} ${cfg.border} border-b px-6 py-5 flex items-center justify-between`}>
         <div>
-          <p className="text-white/50 text-sm uppercase tracking-widest">Predicted Close</p>
-          <p className="text-4xl font-bold text-white mt-1">
+          <div className="flex items-center gap-3 mb-1">
+            <span className="text-3xl font-bold text-slate-800">{data.ticker}</span>
+            {data.company_name && <span className="text-slate-500 font-medium">{data.company_name}</span>}
+          </div>
+          <p className="text-slate-500 text-sm flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5" /> Prediction for {data.prediction_date}
+          </p>
+        </div>
+        <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border ${cfg.badge} ${cfg.border} font-bold text-lg`}>
+          <Icon className="w-5 h-5" />
+          {cfg.label}
+        </div>
+      </div>
+
+      {/* Main prices */}
+      <div className="px-6 py-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div>
+          <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Current Price</p>
+          <p className="text-2xl font-bold text-slate-800">${Number(data.current_price || data.last_close).toFixed(2)}</p>
+        </div>
+        <div>
+          <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Predicted Close</p>
+          <p className={`text-2xl font-bold ${isUp ? "text-emerald-600" : "text-red-600"}`}>
             ${Number(data.predicted_next_close).toFixed(2)}
           </p>
-          <p className="text-white/50 text-sm mt-1">
-            Last close: <span className="text-white/80">${Number(data.last_close).toFixed(2)}</span>
+        </div>
+        <div>
+          <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Expected Move</p>
+          <p className={`text-2xl font-bold flex items-center gap-1 ${isUp ? "text-emerald-600" : "text-red-600"}`}>
+            {isUp ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
+            {isUp ? "+" : ""}{pct}%
           </p>
         </div>
-        <div className={`flex flex-col items-center justify-center rounded-xl border px-5 py-3 ${cfg.bg}`}>
-          <Icon className={`w-8 h-8 ${cfg.color}`} />
-          <span className={`text-lg font-bold mt-1 ${cfg.color}`}>{cfg.label}</span>
+        <div>
+          <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Confidence</p>
+          <p className={`text-sm font-bold px-3 py-1 rounded-full inline-block ${confidenceColor[data.confidence] || confidenceColor.MEDIUM}`}>
+            {data.confidence || "MEDIUM"}
+          </p>
         </div>
       </div>
 
-      {pct !== null && (
-        <div className={`flex items-center gap-2 text-lg font-semibold ${isUp ? "text-emerald-400" : "text-red-400"}`}>
-          {isUp ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
-          Expected move: {isUp ? "+" : ""}{pct}%
+      {/* Price targets & levels */}
+      {(data.price_target_7d || data.support_level || data.resistance_level) && (
+        <div className="px-6 pb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {data.price_target_7d && (
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-slate-400 text-xs flex items-center gap-1"><Target className="w-3 h-3" /> 7-Day Target</p>
+              <p className="text-slate-700 font-semibold mt-0.5">${Number(data.price_target_7d).toFixed(2)}</p>
+            </div>
+          )}
+          {data.price_target_30d && (
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-slate-400 text-xs flex items-center gap-1"><Target className="w-3 h-3" /> 30-Day Target</p>
+              <p className="text-slate-700 font-semibold mt-0.5">${Number(data.price_target_30d).toFixed(2)}</p>
+            </div>
+          )}
+          {data.support_level && (
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-slate-400 text-xs flex items-center gap-1"><Shield className="w-3 h-3" /> Support</p>
+              <p className="text-emerald-600 font-semibold mt-0.5">${Number(data.support_level).toFixed(2)}</p>
+            </div>
+          )}
+          {data.resistance_level && (
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-slate-400 text-xs flex items-center gap-1"><Shield className="w-3 h-3" /> Resistance</p>
+              <p className="text-red-500 font-semibold mt-0.5">${Number(data.resistance_level).toFixed(2)}</p>
+            </div>
+          )}
         </div>
       )}
-
-      {data.confidence_lower != null && (
-        <div className="flex gap-4 text-sm text-white/60">
-          <span>Confidence band:</span>
-          <span className="text-white/80">${Number(data.confidence_lower).toFixed(2)} – ${Number(data.confidence_upper).toFixed(2)}</span>
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 text-sm text-white/40">
-        <AlertCircle className="w-4 h-4" />
-        Prediction for {data.prediction_date}
-        {data.is_demo && <span className="ml-2 px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 text-xs">DEMO MODE</span>}
-      </div>
     </div>
   );
 }
