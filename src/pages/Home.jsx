@@ -25,7 +25,7 @@ async function fetchPrediction(ticker, range = RANGES[3]) {
 CRITICAL: You MUST include chart_data with exactly 90 daily data points (one per trading day) going back from today. Each point MUST have ALL these fields: date (YYYY-MM-DD string), close (number), volume (number - realistic like 30000000-100000000 for large caps), ma5 (5-day moving average), ma20 (20-day moving average). Use realistic historical prices. Keep values concise (2 decimal places max).
 
 Return ONLY valid JSON.`,
-    add_context_from_internet: true,
+
     response_json_schema: {
       type: "object",
       properties: {
