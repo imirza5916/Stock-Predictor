@@ -30,8 +30,9 @@ export default function PriceChart({ chartData, prediction, range, ranges, onRan
         ma20: d.ma20 != null ? parseFloat(d.ma20) : null,
         volume: d.volume != null ? parseInt(d.volume) : null,
       }));
+    const sliced = range?.points ? mapped.slice(-range.points) : mapped;
     if (prediction) {
-      mapped.push({
+      sliced.push({
         date: prediction.prediction_date,
         close: null,
         predicted: prediction.predicted_next_close,
@@ -40,8 +41,8 @@ export default function PriceChart({ chartData, prediction, range, ranges, onRan
         ma5: null, ma20: null, volume: null,
       });
     }
-    return mapped;
-  }, [chartData, prediction]);
+    return sliced;
+  }, [chartData, prediction, range]);
 
   if (!data.length) return null;
 
