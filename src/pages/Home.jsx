@@ -102,7 +102,8 @@ export default function Home() {
 
   const handleRangeChange = useCallback((newRange) => {
     setRange(newRange);
-  }, []);
+    if (currentTicker) handlePredict(currentTicker, newRange);
+  }, [currentTicker]);
 
   const features = [
     { icon: Brain, title: "AI-Powered", desc: "Real-time analysis using live market data, news & sentiment", bg: "bg-indigo-50", text: "text-indigo-600" },
