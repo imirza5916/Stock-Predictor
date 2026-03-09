@@ -138,17 +138,17 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
 
         {loading && (
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-12 flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center">
-              <Brain className="w-8 h-8 text-indigo-600 animate-pulse" />
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-12 flex flex-col items-center gap-5" role="status" aria-live="polite" aria-label="Analyzing stock data">
+            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-50 to-violet-50 flex items-center justify-center ring-4 ring-indigo-50">
+              <Brain className="w-10 h-10 text-indigo-500 animate-pulse" aria-hidden="true" />
             </div>
             <div className="text-center">
-              <p className="font-semibold text-slate-700 text-lg">Analyzing market data...</p>
+              <p className="font-bold text-slate-700 text-lg">Analyzing {currentTicker}...</p>
               <p className="text-slate-400 text-sm mt-1">AI is researching news, technicals & sentiment</p>
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-1.5" aria-hidden="true">
               {[0,1,2,3,4].map(i => (
-                <div key={i} className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{animationDelay: `${i*0.1}s`}} />
+                <div key={i} className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{animationDelay: `${i*0.12}s`}} />
               ))}
             </div>
           </div>
