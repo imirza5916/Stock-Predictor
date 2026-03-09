@@ -104,7 +104,7 @@ export default function Home() {
           <TickerInput onPredict={handlePredict} loading={loading} />
           {history.length > 0 && (
             <div className="mt-4">
-              <RecentPredictions history={history} onSelect={handlePredict} />
+              <RecentPredictions history={history} onSelect={handlePredict} onRemove={handleRemove} />
             </div>
           )}
         </div>
