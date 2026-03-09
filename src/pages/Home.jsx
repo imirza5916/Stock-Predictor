@@ -164,7 +164,7 @@ export default function Home() {
           <>
             <PredictionCard data={prediction} />
             <AIAnalysis data={prediction} />
-            {chartData.length > 0 && <PriceChart chartData={chartData} prediction={prediction} />}
+            {chartData.length > 0 && <PriceChart chartData={chartData} prediction={prediction} range={range} ranges={RANGES} onRangeChange={handleRangeChange} loading={loading} />}
           </>
         )}
 
