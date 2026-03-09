@@ -8,11 +8,9 @@ import RecentPredictions from "../components/stocksage/RecentPredictions";
 import { AlertCircle, TrendingUp, BarChart2, Brain, Sparkles } from "lucide-react";
 
 const RANGES = [
-  { label: "1W",  key: "1week",   points: 7  },
-  { label: "1M",  key: "1month",  points: 30 },
-  { label: "3M",  key: "3months", points: 90 },
-  { label: "6M",  key: "6months", points: 180 },
-  { label: "1Y",  key: "1year",   points: 365 },
+  { label: "1W", key: "1week",   points: 7  },
+  { label: "1M", key: "1month",  points: 30 },
+  { label: "3M", key: "3months", points: 90 },
 ];
 
 async function fetchPrediction(ticker, range = RANGES[3]) {
