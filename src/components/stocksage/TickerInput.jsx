@@ -19,7 +19,7 @@ export default function TickerInput({ onPredict, loading }) {
           <input
             value={ticker}
             onChange={(e) => setTicker(e.target.value.toUpperCase())}
-            placeholder="Enter stock ticker (e.g. AAPL, TSLA...)"
+            placeholder="Enter stock ticker"
             className="w-full pl-12 pr-4 h-14 rounded-2xl border-2 border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 text-lg font-medium tracking-widest focus:outline-none focus:border-indigo-400 transition-colors shadow-sm"
             maxLength={10}
           />
