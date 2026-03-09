@@ -47,7 +47,23 @@ export default function PriceChart({ chartData, prediction, range, ranges, onRan
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 space-y-3">
-      <h3 className="font-semibold text-slate-800">Price History</h3>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h3 className="font-semibold text-slate-800">Price History</h3>
+        {ranges && (
+          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+            {ranges.map((r) => (
+              <button
+                key={r.key}
+                disabled={loading}
+                onClick={() => onRangeChange(r)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${range?.key === r.key ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <defs>
