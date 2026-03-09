@@ -112,16 +112,16 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-white border-b border-slate-100 shadow-sm">
+      <div className="bg-white border-b border-slate-200/70 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2.5 rounded-2xl bg-indigo-600">
-              <TrendingUp className="w-6 h-6 text-white" />
+          <div className="flex items-center gap-3 mb-7">
+            <div className="p-2.5 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-md shadow-indigo-200">
+              <TrendingUp className="w-6 h-6 text-white" aria-hidden="true" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-800 tracking-tight">StockSage</h1>
               <p className="text-slate-400 text-sm flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> AI-powered stock predictions
+                <Sparkles className="w-3.5 h-3.5 text-violet-400" aria-hidden="true" /> AI-powered stock predictions
               </p>
             </div>
           </div>
