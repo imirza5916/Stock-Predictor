@@ -5,11 +5,14 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { ticker } = await req.json();
+    const { ticker, range } = await req.json();
     if (!ticker) return Response.json({ error: 'Ticker required' }, { status: 400 });
 
-    // Fetch 3 months of daily data from Yahoo Finance
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker.toUpperCase()}?interval=1d&range=3mo`;
+    const is1D = range === '1d';
+    const yahooInterval = is1D ? '5m' : '1d';
+    const yahooRange = is1D ? '1d' : '3mo';
+
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker.toUpperCase()}?interval=${yahooInterval}&range=${yahooRange}`;
     const res = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0' }
     });
@@ -27,7 +30,9 @@ Deno.serve(async (req) => {
 
     // Build chart data
     const rawData = timestamps.map((ts, i) => ({
-        date: new Date(ts * 1000).toISOString().split('T')[0],
+        date: is1D
+            ? new Date(ts * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+            : new Date(ts * 1000).toISOString().split('T')[0],
         close: closes[i] ? parseFloat(closes[i].toFixed(2)) : null,
         volume: volumes[i] || null,
     })).filter(d => d.close != null);
