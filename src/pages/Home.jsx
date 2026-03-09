@@ -5,7 +5,7 @@ import PredictionCard from "../components/stocksage/PredictionCard";
 import PriceChart from "../components/stocksage/PriceChart";
 import AIAnalysis from "../components/stocksage/AIAnalysis";
 import RecentPredictions from "../components/stocksage/RecentPredictions";
-import { AlertCircle, TrendingUp, BarChart2, Brain, Sparkles } from "lucide-react";
+import { AlertCircle, TrendingUp, BarChart2, Brain, Sparkles, LayoutDashboard } from "lucide-react";
 import PDFReport from "../components/stocksage/PDFReport";
 import Watchlist from "../components/stocksage/Watchlist";
 import { createPageUrl } from "@/utils";
