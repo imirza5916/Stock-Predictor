@@ -37,6 +37,8 @@ export default function Home() {
   const [chartData, setChartData]  = useState([]);
   const [history, setHistory]      = useState([]);
   const [backendOnline, setBackendOnline] = useState(null);
+  const [apiUrl, setApiUrl] = useState(localStorage.getItem("stocksage_api_base") || "");
+  const [apiUrlInput, setApiUrlInput] = useState(localStorage.getItem("stocksage_api_base") || "");
 
   const handlePredict = useCallback(async (ticker) => {
     setLoading(true);
