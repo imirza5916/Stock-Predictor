@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Minus, Clock } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Clock, X } from "lucide-react";
 
 const signalIcon = { BUY: TrendingUp, SELL: TrendingDown, HOLD: Minus };
 const signalStyle = {
@@ -7,7 +7,7 @@ const signalStyle = {
   HOLD: "border-amber-200 bg-amber-50 text-amber-700",
 };
 
-export default function RecentPredictions({ history, onSelect }) {
+export default function RecentPredictions({ history, onSelect, onRemove }) {
   if (!history.length) return null;
   return (
     <div className="space-y-2">
@@ -18,15 +18,25 @@ export default function RecentPredictions({ history, onSelect }) {
         {history.map((p) => {
           const Icon = signalIcon[p.signal] || Minus;
           return (
-            <button
+            <div
               key={p.ticker + p.prediction_date}
-              onClick={() => onSelect(p.ticker)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm font-medium transition-all hover:shadow-sm ${signalStyle[p.signal] || signalStyle.HOLD}`}
+              className={`flex items-center gap-1 rounded-xl border text-sm font-medium ${signalStyle[p.signal] || signalStyle.HOLD}`}
             >
-              <span className="font-mono font-bold">{p.ticker}</span>
-              <Icon className="w-3.5 h-3.5" />
-              <span className="opacity-70">${Number(p.predicted_next_close).toFixed(2)}</span>
-            </button>
+              <button
+                onClick={() => onSelect(p.ticker)}
+                className="flex items-center gap-2 px-3 py-1.5 hover:opacity-80 transition-opacity"
+              >
+                <span className="font-mono font-bold">{p.ticker}</span>
+                <Icon className="w-3.5 h-3.5" />
+                <span className="opacity-70">${Number(p.predicted_next_close).toFixed(2)}</span>
+              </button>
+              <button
+                onClick={() => onRemove(p.ticker)}
+                className="pr-2 py-1.5 opacity-50 hover:opacity-100 transition-opacity"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
           );
         })}
       </div>

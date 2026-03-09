@@ -21,13 +21,15 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function PriceChart({ chartData, prediction }) {
   const data = useMemo(() => {
     if (!chartData?.length) return [];
-    const mapped = chartData.map((d) => ({
-      date: d.date,
-      close: d.close,
-      ma5: d.ma5 ?? null,
-      ma20: d.ma20 ?? null,
-      volume: d.volume ?? null,
-    }));
+    const mapped = chartData
+      .filter((d) => d.date && d.close != null)
+      .map((d) => ({
+        date: d.date,
+        close: parseFloat(d.close) || null,
+        ma5: d.ma5 != null ? parseFloat(d.ma5) : null,
+        ma20: d.ma20 != null ? parseFloat(d.ma20) : null,
+        volume: d.volume != null ? parseInt(d.volume) : null,
+      }));
     if (prediction) {
       mapped.push({
         date: prediction.prediction_date,
