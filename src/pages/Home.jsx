@@ -82,18 +82,25 @@ export default function Home() {
     setHistory((prev) => prev.filter((p) => p.ticker !== ticker));
   }, []);
 
-  const handlePredict = useCallback(async (ticker) => {
+  const handlePredict = useCallback(async (ticker, overrideRange) => {
+    const activeRange = overrideRange || range;
     setLoading(true);
     setError(null);
     setPrediction(null);
     setChartData([]);
-    const result = await fetchPrediction(ticker);
+    setCurrentTicker(ticker);
+    const result = await fetchPrediction(ticker, activeRange);
     setPrediction(result);
     setChartData(result.chart_data || []);
     setHistory((prev) => [result, ...prev.filter((p) => p.ticker !== ticker)].slice(0, 8));
     try { await base44.entities.Prediction.create({ ...result, is_demo: false }); } catch (_) {}
     setLoading(false);
-  }, []);
+  }, [range]);
+
+  const handleRangeChange = useCallback((newRange) => {
+    setRange(newRange);
+    if (currentTicker) handlePredict(currentTicker, newRange);
+  }, [currentTicker, handlePredict]);
 
   const features = [
     { icon: Brain, title: "AI-Powered", desc: "Real-time analysis using live market data, news & sentiment", bg: "bg-indigo-50", text: "text-indigo-600" },
