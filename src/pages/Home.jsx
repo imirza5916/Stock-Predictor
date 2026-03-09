@@ -58,8 +58,11 @@ All prices MUST be realistic and proportional to the current price of $${lastClo
     }
   });
 
+  const returnPct = ((result.predicted_next_close - lastClose) / lastClose) * 100;
+
   return {
     ...result,
+    predicted_return_pct: parseFloat(returnPct.toFixed(2)),
     ticker: ticker.toUpperCase(),
     company_name: companyName,
     current_price: lastClose,
