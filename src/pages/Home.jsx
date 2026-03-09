@@ -9,20 +9,19 @@ import { AlertCircle, TrendingUp, BarChart2, Brain, Sparkles } from "lucide-reac
 import PDFReport from "../components/stocksage/PDFReport";
 
 const RANGES = [
-  { label: "1D", key: "1d",      points: null, yahooRange: "1d" },
   { label: "1W", key: "1week",   points: 7  },
   { label: "1M", key: "1month",  points: 30 },
   { label: "3M", key: "3months", points: 90 },
 ];
 
-async function fetchPrediction(ticker, activeRange) {
+async function fetchPrediction(ticker) {
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const predDate = tomorrow.toISOString().split("T")[0];
 
   // Step 1: Fetch real price data from Yahoo Finance
-  const stockRes = await base44.functions.invoke("stockData", { ticker, range: activeRange?.key });
+  const stockRes = await base44.functions.invoke("stockData", { ticker });
   const { chartData, lastClose, companyName } = stockRes.data;
 
   // Step 2: Ask LLM for analysis only (no chart data needed from LLM)
@@ -80,19 +79,18 @@ export default function Home() {
   const [chartData, setChartData] = useState([]);
   const [history, setHistory] = useState([]);
   const [currentTicker, setCurrentTicker] = useState(null);
-  const [range, setRange] = useState(RANGES[3]);
+  const [range, setRange] = useState(RANGES[2]);
   const handleRemove = useCallback((ticker) => {
     setHistory((prev) => prev.filter((p) => p.ticker !== ticker));
   }, []);
 
-  const handlePredict = useCallback(async (ticker, overrideRange) => {
-    const activeRange = overrideRange || range;
+  const handlePredict = useCallback(async (ticker) => {
     setLoading(true);
     setError(null);
     setPrediction(null);
     setChartData([]);
     setCurrentTicker(ticker);
-    const result = await fetchPrediction(ticker, activeRange);
+    const result = await fetchPrediction(ticker);
     setPrediction(result);
     setChartData(result.chart_data || []);
     setHistory((prev) => [result, ...prev.filter((p) => p.ticker !== ticker)].slice(0, 8));
@@ -102,8 +100,7 @@ export default function Home() {
 
   const handleRangeChange = useCallback((newRange) => {
     setRange(newRange);
-    if (currentTicker) handlePredict(currentTicker, newRange);
-  }, [currentTicker]);
+  }, []);
 
   const features = [
     { icon: Brain, title: "AI-Powered", desc: "Real-time analysis using live market data, news & sentiment", bg: "bg-indigo-50", text: "text-indigo-600" },
