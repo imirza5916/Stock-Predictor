@@ -8,6 +8,7 @@ import RecentPredictions from "../components/stocksage/RecentPredictions";
 import { AlertCircle, TrendingUp, BarChart2, Brain, Sparkles } from "lucide-react";
 import PDFReport from "../components/stocksage/PDFReport";
 import Watchlist from "../components/stocksage/Watchlist";
+import { createPageUrl } from "@/utils";
 
 const RANGES = [
   { label: "1W", key: "1week",   points: 7  },
