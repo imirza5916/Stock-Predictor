@@ -75,7 +75,7 @@ export default function Home() {
   const [chartData, setChartData] = useState([]);
   const [history, setHistory] = useState([]);
   const [currentTicker, setCurrentTicker] = useState(null);
-  const [range, setRange] = useState(RANGES[3]);
+  const [range, setRange] = useState(RANGES[2]);
   const handleRemove = useCallback((ticker) => {
     setHistory((prev) => prev.filter((p) => p.ticker !== ticker));
   }, []);
