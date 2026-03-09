@@ -15,7 +15,7 @@ const RANGES = [
   { label: "3M", key: "3months", points: 90 },
 ];
 
-async function fetchPrediction(ticker) {
+async function fetchPrediction(ticker, activeRange) {
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
