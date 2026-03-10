@@ -80,6 +80,7 @@ export default function Home() {
   const [prediction, setPrediction] = useState(null);
   const [chartData, setChartData] = useState([]);
   const [history, setHistory] = useState([]);
+  const [pastPredictions, setPastPredictions] = useState([]);
   const [currentTicker, setCurrentTicker] = useState(null);
   const [range, setRange] = useState(RANGES[2]);
   const handleRemove = useCallback((ticker) => {
