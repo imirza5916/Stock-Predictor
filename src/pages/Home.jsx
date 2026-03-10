@@ -98,6 +98,11 @@ export default function Home() {
     setChartData(result.chart_data || []);
     setHistory((prev) => [result, ...prev.filter((p) => p.ticker !== ticker)].slice(0, 8));
     try { await base44.entities.Prediction.create({ ...result, is_demo: false }); } catch (_) {}
+    // Load past predictions for this ticker to overlay on chart
+    try {
+      const past = await base44.entities.Prediction.filter({ ticker: ticker.toUpperCase() }, "-prediction_date", 30);
+      setPastPredictions(past);
+    } catch (_) { setPastPredictions([]); }
     setLoading(false);
   }, [range]);
 
