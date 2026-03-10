@@ -49,12 +49,14 @@
  */
 import Dashboard from './pages/Dashboard';
 import Home from './pages/Home';
+import Portfolio from './pages/Portfolio';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "Dashboard": Dashboard,
     "Home": Home,
+    "Portfolio": Portfolio,
 }
 
 export const pagesConfig = {
