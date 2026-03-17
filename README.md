@@ -1,39 +1,41 @@
-**Welcome to your Base44 project** 
+# 📈 StockSage - AI Stock Predictor 🔮
 
-**About**
+An **AI-powered stock analysis platform** that fetches real-time market data, generates next-day price predictions, and delivers BUY/SELL/HOLD signals with full technical analysis.
 
-View and Edit  your app on [Base44.com](http://Base44.com) 
+---
 
-This project contains everything you need to run your app locally.
+## ✨ Features
 
-**Edit the code in your local development environment**
+✔️ Fetch **live stock prices** from Yahoo Finance  
+✔️ Predict **next-day closing prices** using AI/LLM analysis  
+✔️ Generate **BUY / SELL / HOLD signals** with confidence ratings  
+✔️ Display **7-day and 30-day price targets**  
+✔️ Visualize trends with **Moving Averages (MA5, MA20), support & resistance levels**  
+✔️ **Backtesting chart** — overlay historical AI signals against actual closing prices  
+✔️ **Portfolio tracker** — track holdings with real-time P&L and AI-projected gains  
+✔️ **Watchlist** — monitor multiple tickers with one-click refresh  
+✔️ **Email alerts** — get notified on signal changes or price thresholds  
+✔️ **PDF export** — download a full analysis report for any stock  
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+---
 
-**Prerequisites:** 
+## 🚀 How to Run
 
-1. Clone the repository using the project's Git URL 
-2. Navigate to the project directory
-3. Install dependencies: `npm install`
-4. Create an `.env.local` file and set the right environment variables
+1. **Install Node.js** (v18+ recommended)
+2. **Clone the repository**:
+   ```bash
+   git clone https://github.com/imirza5916/Stock-Predictor.git
+   cd Stock-Predictor
+Install dependencies
+npm install
 
-```
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=your_backend_url
+🛠️ Tech Stack:
+Layer	Technology, Frontend	React, Tailwind CSS, Recharts, AI Analysis	LLM, Market Data	Yahoo Finance API, PDF Export	jsPDF
 
-e.g.
-VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
-VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.base44.app
-```
 
-Run the app: `npm run dev`
-
-**Publish your changes**
-
-Open [Base44.com](http://Base44.com) and click on Publish.
-
-**Docs & Support**
-
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
-
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+📊 How It Works
+Enter any stock ticker (e.g. AAPL, TSLA, NVDA)
+Live price history is fetched from Yahoo Finance
+AI analyzes technicals, sentiment, and fundamentals
+Prediction card displays the signal, predicted close, and key factors
+Chart overlays past AI signals on actual prices for backtesting
