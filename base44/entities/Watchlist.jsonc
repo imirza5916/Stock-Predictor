@@ -1,0 +1,43 @@
+{
+  "name": "Watchlist",
+  "type": "object",
+  "properties": {
+    "ticker": {
+      "type": "string"
+    },
+    "company_name": {
+      "type": "string"
+    },
+    "last_price": {
+      "type": "number"
+    },
+    "predicted_next_close": {
+      "type": "number"
+    },
+    "predicted_return_pct": {
+      "type": "number"
+    },
+    "signal": {
+      "type": "string",
+      "enum": [
+        "BUY",
+        "SELL",
+        "HOLD"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "HIGH",
+        "MEDIUM",
+        "LOW"
+      ]
+    },
+    "last_refreshed": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "ticker"
+  ]
+}

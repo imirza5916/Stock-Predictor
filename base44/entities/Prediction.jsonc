@@ -1,0 +1,47 @@
+{
+  "name": "Prediction",
+  "type": "object",
+  "properties": {
+    "ticker": {
+      "type": "string"
+    },
+    "last_close": {
+      "type": "number"
+    },
+    "predicted_next_close": {
+      "type": "number"
+    },
+    "predicted_return": {
+      "type": "number"
+    },
+    "signal": {
+      "type": "string",
+      "enum": [
+        "BUY",
+        "SELL",
+        "HOLD"
+      ]
+    },
+    "model_mae": {
+      "type": "number"
+    },
+    "best_alpha": {
+      "type": "number"
+    },
+    "confidence_lower": {
+      "type": "number"
+    },
+    "confidence_upper": {
+      "type": "number"
+    },
+    "prediction_date": {
+      "type": "string"
+    },
+    "is_demo": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ticker"
+  ]
+}

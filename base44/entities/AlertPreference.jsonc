@@ -1,0 +1,38 @@
+{
+  "name": "AlertPreference",
+  "type": "object",
+  "properties": {
+    "ticker": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "alert_on_buy": {
+      "type": "boolean",
+      "default": true
+    },
+    "alert_on_sell": {
+      "type": "boolean",
+      "default": true
+    },
+    "alert_on_hold": {
+      "type": "boolean",
+      "default": false
+    },
+    "price_above": {
+      "type": "number"
+    },
+    "price_below": {
+      "type": "number"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "ticker",
+    "email"
+  ]
+}
