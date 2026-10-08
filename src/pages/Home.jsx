@@ -8,12 +8,14 @@ import RecentPredictions from "../components/stocksage/RecentPredictions";
 import { AlertCircle, TrendingUp, BarChart2, Brain, Sparkles, LayoutDashboard, Briefcase } from "lucide-react";
 import PDFReport from "../components/stocksage/PDFReport";
 import Watchlist from "../components/stocksage/Watchlist";
+import BacktestResults from "../components/stocksage/BacktestResults";
 import { createPageUrl } from "@/utils";
 
 const RANGES = [
   { label: "1W", key: "1week",   points: 7  },
   { label: "1M", key: "1month",  points: 30 },
   { label: "3M", key: "3months", points: 90 },
+  { label: "1Y", key: "1year", points: 252 },
 ];
 
 async function fetchPrediction(ticker) {
@@ -24,7 +26,7 @@ async function fetchPrediction(ticker) {
 
   // Step 1: Fetch real price data + Ridge regression prediction from backend
   const stockRes = await base44.functions.invoke("stockData", { ticker });
-  const { chartData, lastClose, companyName, ridge } = stockRes.data;
+  const { chartData, lastClose, companyName, ridge, backtest } = stockRes.data;
 
   // The Ridge model's prediction is the deterministic anchor
   const ridgePred = ridge?.predicted_next_close ?? lastClose;
@@ -44,6 +46,7 @@ Current price: $${lastClose}
 Ridge regression model prediction for next close: $${ridgePred} (expected return: ${ridgeReturnPct.toFixed(2)}%)
 Model test MAE: $${ridge?.model_mae ?? "N/A"} | Best alpha: ${ridge?.best_alpha ?? "N/A"}
 Confidence interval: $${ridge?.confidence_lower ?? "N/A"} - $${ridge?.confidence_upper ?? "N/A"}
+Walk-forward backtest: model direction hit rate ${backtest?.model_hit_rate ?? "N/A"}% vs always-up ${backtest?.always_up_hit_rate ?? "N/A"}% over ${backtest?.n_signals ?? "N/A"} signals; model return ${backtest?.model_return_pct ?? "N/A"}% vs buy-and-hold ${backtest?.buy_hold_return_pct ?? "N/A"}%.
 
 Based on this REAL data and the Ridge model's prediction, provide:
 - A trading signal (BUY, SELL, or HOLD) — base this on the Ridge predicted return and the technical indicators (MA5 vs MA20 crossover, momentum)
@@ -84,6 +87,7 @@ The Ridge prediction of $${ridgePred} is the model's forecast — your job is to
     current_price: lastClose,
     last_close: lastClose,
     prediction_date: predDate,
+    backtest,
     chart_data: chartData,
   };
 }
@@ -205,6 +209,7 @@ export default function Home() {
             </div>
             <PredictionCard data={prediction} />
             <AIAnalysis data={prediction} />
+            <BacktestResults backtest={prediction.backtest} ticker={prediction.ticker} />
             {chartData.length > 0 && <PriceChart chartData={chartData} prediction={prediction} pastPredictions={pastPredictions} range={range} ranges={RANGES} onRangeChange={handleRangeChange} loading={loading} />}
           </>
         )}

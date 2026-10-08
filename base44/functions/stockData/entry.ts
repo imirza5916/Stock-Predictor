@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
     if (!ticker) return Response.json({ error: 'Ticker required' }, { status: 400 });
 
     // Fetch 3 months of daily data from Yahoo Finance
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker.toUpperCase()}?interval=1d&range=3mo`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker.toUpperCase()}?interval=1d&range=1y`;
     const res = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0' }
     });
@@ -49,8 +49,9 @@ Deno.serve(async (req) => {
     const ma5Arr = chartData.map(d => d.ma5);
     const ma20Arr = chartData.map(d => d.ma20);
     const ridge = computeRidgePrediction(closesOnly, ma5Arr, ma20Arr);
+    const backtest = walkForwardBacktest(closesOnly, ma5Arr, ma20Arr);
 
-    return Response.json({ chartData, lastClose, companyName, ticker: ticker.toUpperCase(), ridge });
+    return Response.json({ chartData, lastClose, companyName, ticker: ticker.toUpperCase(), ridge, backtest });
 });
 
 // ---------- Ridge Regression helpers ----------
@@ -189,5 +190,92 @@ function computeRidgePrediction(closes: number[], ma5: number[], ma20: number[])
         best_alpha: best.alpha,
         confidence_lower: parseFloat((predictedNext - testMae).toFixed(2)),
         confidence_upper: parseFloat((predictedNext + testMae).toFixed(2)),
+    };
+}
+
+// Walk-forward backtest: refit each day on all prior data, predict next-day direction.
+// Scores the model against 3 baselines (always-up, persistence, MA crossover) and
+// compares a long/flat strategy return vs buy-and-hold and the MA-crossover strategy.
+function walkForwardBacktest(closes: number[], ma5: number[], ma20: number[]) {
+    const n = closes.length;
+    const minTrain = 30;
+    if (n < minTrain + 5) return null;
+
+    const alphas = [0.01, 0.1, 1, 10, 100, 1000];
+    const features = (i: number): number[] => {
+        const lag1 = i > 0 ? closes[i - 1] : closes[i];
+        const ret5d = i >= 5 ? (closes[i] - closes[i - 5]) / closes[i - 5] : 0;
+        return [closes[i], ma5[i] || closes[i], ma20[i] || closes[i], lag1, ret5d];
+    };
+
+    let modelHits = 0, alwaysUpHits = 0, persistHits = 0, maCrossHits = 0, nSignals = 0;
+    let modelLogRet = 0, buyHoldLogRet = 0, maCrossLogRet = 0;
+
+    for (let t = minTrain; t < n - 1; t++) {
+        // Training rows: features(i) -> closes[i+1], for i in [0, t)
+        const trainX: number[][] = [];
+        const trainY: number[] = [];
+        for (let i = 0; i < t; i++) {
+            trainX.push(features(i));
+            trainY.push(closes[i + 1]);
+        }
+        // Nested validation: last 20% of train picks alpha (test day untouched)
+        const valStart = Math.floor(t * 0.8);
+        const scaler = fitScaler(trainX.slice(0, valStart));
+        const yMean = trainY.slice(0, valStart).reduce((a, b) => a + b, 0) / Math.max(1, valStart);
+        const Xs = applyScaler(trainX, scaler);
+        const yc = trainY.map(v => v - yMean);
+
+        let best = { alpha: 1, valMae: Infinity };
+        for (const alpha of alphas) {
+            const coefs = ridgeFit(Xs.slice(0, valStart), yc.slice(0, valStart), alpha);
+            let absErr = 0;
+            for (let i = valStart; i < t; i++) {
+                const pred = yMean + dot(Xs[i], coefs);
+                absErr += Math.abs(pred - trainY[i]);
+            }
+            const valMae = absErr / Math.max(1, t - valStart);
+            if (valMae < best.valMae) best = { alpha, valMae };
+        }
+        // Refit on full train [0, t) with best alpha
+        const fullScaler = fitScaler(trainX);
+        const fullYMean = trainY.reduce((a, b) => a + b, 0) / t;
+        const Xfull = applyScaler(trainX, fullScaler);
+        const ycFull = trainY.map(v => v - fullYMean);
+        const coefs = ridgeFit(Xfull, ycFull, best.alpha);
+
+        // Predict close[t+1] and score it
+        const predScaled = applyScaler([features(t)], fullScaler)[0];
+        const predNext = fullYMean + dot(predScaled, coefs);
+        const actualNext = closes[t + 1];
+        const lastClose = closes[t];
+
+        const predUp = predNext > lastClose;
+        const actualUp = actualNext > lastClose;
+        const persistUp = lastClose > closes[t - 1];
+        const maCrossUp = (ma5[t] || lastClose) > (ma20[t] || lastClose);
+
+        if (predUp === actualUp) modelHits++;
+        if (actualUp) alwaysUpHits++;
+        if (persistUp === actualUp) persistHits++;
+        if (maCrossUp === actualUp) maCrossHits++;
+        nSignals++;
+
+        const dailyLogRet = Math.log(actualNext / lastClose);
+        buyHoldLogRet += dailyLogRet;
+        if (predUp) modelLogRet += dailyLogRet;       // long when model says up, flat when down
+        if (maCrossUp) maCrossLogRet += dailyLogRet;  // long when MA5 > MA20, flat when down
+    }
+
+    const toPct = (x: number) => parseFloat(((Math.exp(x) - 1) * 100).toFixed(2));
+    return {
+        n_signals: nSignals,
+        model_hit_rate: parseFloat((modelHits / nSignals * 100).toFixed(1)),
+        always_up_hit_rate: parseFloat((alwaysUpHits / nSignals * 100).toFixed(1)),
+        persistence_hit_rate: parseFloat((persistHits / nSignals * 100).toFixed(1)),
+        ma_cross_hit_rate: parseFloat((maCrossHits / nSignals * 100).toFixed(1)),
+        model_return_pct: toPct(modelLogRet),
+        buy_hold_return_pct: toPct(buyHoldLogRet),
+        ma_cross_return_pct: toPct(maCrossLogRet),
     };
 }
