@@ -46,10 +46,11 @@ Deno.serve(async (req) => {
 
     // --- Ridge Regression prediction ---
     const closesOnly = rawData.map(d => d.close);
+    const volumesArr = rawData.map(d => d.volume || 0);
     const ma5Arr = chartData.map(d => d.ma5);
     const ma20Arr = chartData.map(d => d.ma20);
-    const ridge = computeRidgePrediction(closesOnly, ma5Arr, ma20Arr);
-    const backtest = walkForwardBacktest(closesOnly, ma5Arr, ma20Arr);
+    const ridge = computeRidgePrediction(closesOnly, volumesArr, ma5Arr, ma20Arr);
+    const backtest = walkForwardBacktest(closesOnly, volumesArr, ma5Arr, ma20Arr);
 
     return Response.json({ chartData, lastClose, companyName, ticker: ticker.toUpperCase(), ridge, backtest });
 });
@@ -121,25 +122,79 @@ function applyScaler(X: number[][], s: { mean: number[]; std: number[] }): numbe
     return X.map(row => row.map((v, j) => (v - s.mean[j]) / s.std[j]));
 }
 
-// 3-way chronological split: train (60%) -> pick alpha on validation (20%) -> report MAE on test (20%, touched once)
-function computeRidgePrediction(closes: number[], ma5: number[], ma20: number[]) {
+// RSI (simple average, period 14) — momentum oscillator 0..100
+function computeRSI(closes: number[], period: number): number[] {
+    const rsi = Array(closes.length).fill(50);
+    for (let i = period; i < closes.length; i++) {
+        let gains = 0, losses = 0;
+        for (let j = i - period + 1; j <= i; j++) {
+            const ch = closes[j] - closes[j - 1];
+            if (ch >= 0) gains += ch; else losses -= ch;
+        }
+        const avgLoss = losses / period;
+        if (avgLoss === 0) rsi[i] = 100;
+        else rsi[i] = 100 - 100 / (1 + (gains / period) / avgLoss);
+    }
+    return rsi;
+}
+
+// 20-day realized volatility (std of log returns)
+function computeRealizedVol(closes: number[], period: number): number[] {
+    const vol = Array(closes.length).fill(0);
+    for (let i = period; i < closes.length; i++) {
+        const rets: number[] = [];
+        let sum = 0;
+        for (let j = i - period + 1; j <= i; j++) {
+            const r = Math.log(closes[j] / closes[j - 1]);
+            rets.push(r); sum += r;
+        }
+        const mean = sum / period;
+        vol[i] = Math.sqrt(rets.reduce((a, b) => a + (b - mean) ** 2, 0) / period);
+    }
+    return vol;
+}
+
+// Returns-based feature vector at index i. All features are stationary
+// (log returns, normalized RSI, realized vol, volume ratio, normalized MA gap).
+// Requires i >= 20 for all features to be defined.
+function buildFeatures(closes: number[], volumes: number[], ma5: number[], ma20: number[],
+                       rsi: number[], vol: number[]): (i: number) => number[] {
     const n = closes.length;
-    if (n < 30) return null;
-
-    // Features (no intercept column — intercept handled via target centering):
-    // [close, ma5, ma20, lag1 (prev close), 5d return]
-    const features = (i: number): number[] => {
-        const lag1 = i > 0 ? closes[i - 1] : closes[i];
-        const ret5d = i >= 5 ? (closes[i] - closes[i - 5]) / closes[i - 5] : 0;
-        return [closes[i], ma5[i] || closes[i], ma20[i] || closes[i], lag1, ret5d];
+    const volAvg = Array(n).fill(0);
+    for (let i = 19; i < n; i++) {
+        let s = 0;
+        for (let j = i - 19; j <= i; j++) s += volumes[j] || 0;
+        volAvg[i] = s / 20;
+    }
+    return (i: number): number[] => {
+        const logRet1d = Math.log(closes[i] / closes[i - 1]);
+        const logRet5d = Math.log(closes[i] / closes[i - 5]);
+        const logRet20d = Math.log(closes[i] / closes[i - 20]);
+        const rsiNorm = (rsi[i] - 50) / 25;                          // RSI centered & scaled
+        const rv = vol[i];                                             // 20d realized vol
+        const volRatio = volAvg[i] > 0 ? (volumes[i] || 0) / volAvg[i] : 1;
+        const maGap = ((ma5[i] || closes[i]) - (ma20[i] || closes[i])) / closes[i];
+        return [logRet1d, logRet5d, logRet20d, rsiNorm, rv, volRatio, maGap];
     };
+}
 
-    // Supervised rows: predict close[i+1] from features known at the close of day i
+// 3-way chronological split: train (60%) -> pick alpha on validation (20%) -> report MAE on test (20%, touched once)
+// Target = next-day log return (stationary); price MAE reported for interpretability.
+function computeRidgePrediction(closes: number[], volumes: number[], ma5: number[], ma20: number[]) {
+    const n = closes.length;
+    if (n < 35) return null;
+
+    const rsi = computeRSI(closes, 14);
+    const vol = computeRealizedVol(closes, 20);
+    const features = buildFeatures(closes, volumes, ma5, ma20, rsi, vol);
+    const featureStart = 20;
+
+    // Supervised rows: features(i) -> log return of day i+1
     const allX: number[][] = [];
     const allY: number[] = [];
-    for (let i = 0; i < n - 1; i++) {
+    for (let i = featureStart; i < n - 1; i++) {
         allX.push(features(i));
-        allY.push(closes[i + 1]);
+        allY.push(Math.log(closes[i + 1] / closes[i]));
     }
     const m = allX.length;
 
@@ -166,7 +221,7 @@ function computeRidgePrediction(closes: number[], ma5: number[], ma20: number[])
         if (valMae < best.valMae) best = { alpha, valMae };
     }
 
-    // Retrain on TRAIN+VALIDATION with best alpha; report MAE on TEST once
+    // Retrain on TRAIN+VALIDATION with best alpha; report price MAE on TEST once
     const finalScaler = fitScaler(allX.slice(0, valEnd));
     const finalYMean = allY.slice(0, valEnd).reduce((a, b) => a + b, 0) / valEnd;
     const Xfinal = applyScaler(allX, finalScaler);
@@ -174,15 +229,18 @@ function computeRidgePrediction(closes: number[], ma5: number[], ma20: number[])
     const finalCoefs = ridgeFit(Xfinal.slice(0, valEnd), ycFinal.slice(0, valEnd), best.alpha);
     let testAbsErr = 0, testCount = 0;
     for (let i = valEnd; i < m; i++) {
-        const pred = finalYMean + dot(Xfinal[i], finalCoefs);
-        testAbsErr += Math.abs(pred - allY[i]);
+        const origIdx = featureStart + i;
+        const predLogRet = finalYMean + dot(Xfinal[i], finalCoefs);
+        const predClose = closes[origIdx] * Math.exp(predLogRet);
+        testAbsErr += Math.abs(predClose - closes[origIdx + 1]);
         testCount++;
     }
     const testMae = testCount > 0 ? testAbsErr / testCount : best.valMae;
 
     // Predict next day after the last available close
     const lastScaled = applyScaler([features(n - 1)], finalScaler)[0];
-    const predictedNext = finalYMean + dot(lastScaled, finalCoefs);
+    const predLogRet = finalYMean + dot(lastScaled, finalCoefs);
+    const predictedNext = closes[n - 1] * Math.exp(predLogRet);
 
     return {
         predicted_next_close: parseFloat(predictedNext.toFixed(2)),
@@ -194,33 +252,32 @@ function computeRidgePrediction(closes: number[], ma5: number[], ma20: number[])
 }
 
 // Walk-forward backtest: refit each day on all prior data, predict next-day direction.
-// Scores the model against 3 baselines (always-up, persistence, MA crossover) and
-// compares a long/flat strategy return vs buy-and-hold and the MA-crossover strategy.
-function walkForwardBacktest(closes: number[], ma5: number[], ma20: number[]) {
+// Target = next-day log return; direction = sign of predicted return.
+function walkForwardBacktest(closes: number[], volumes: number[], ma5: number[], ma20: number[]) {
     const n = closes.length;
-    const minTrain = 30;
-    if (n < minTrain + 5) return null;
+    const featureStart = 20;
+    const minTrain = 30; // training rows
+    if (n < featureStart + minTrain + 5) return null;
 
+    const rsi = computeRSI(closes, 14);
+    const vol = computeRealizedVol(closes, 20);
+    const features = buildFeatures(closes, volumes, ma5, ma20, rsi, vol);
     const alphas = [0.01, 0.1, 1, 10, 100, 1000];
-    const features = (i: number): number[] => {
-        const lag1 = i > 0 ? closes[i - 1] : closes[i];
-        const ret5d = i >= 5 ? (closes[i] - closes[i - 5]) / closes[i - 5] : 0;
-        return [closes[i], ma5[i] || closes[i], ma20[i] || closes[i], lag1, ret5d];
-    };
 
     let modelHits = 0, alwaysUpHits = 0, persistHits = 0, maCrossHits = 0, nSignals = 0;
     let modelLogRet = 0, buyHoldLogRet = 0, maCrossLogRet = 0;
 
-    for (let t = minTrain; t < n - 1; t++) {
-        // Training rows: features(i) -> closes[i+1], for i in [0, t)
+    for (let t = featureStart + minTrain; t < n - 1; t++) {
+        // Training rows: features(i) -> log return(i -> i+1), for i in [featureStart, t)
         const trainX: number[][] = [];
         const trainY: number[] = [];
-        for (let i = 0; i < t; i++) {
+        for (let i = featureStart; i < t; i++) {
             trainX.push(features(i));
-            trainY.push(closes[i + 1]);
+            trainY.push(Math.log(closes[i + 1] / closes[i]));
         }
+        const trainN = trainX.length;
         // Nested validation: last 20% of train picks alpha (test day untouched)
-        const valStart = Math.floor(t * 0.8);
+        const valStart = Math.floor(trainN * 0.8);
         const scaler = fitScaler(trainX.slice(0, valStart));
         const yMean = trainY.slice(0, valStart).reduce((a, b) => a + b, 0) / Math.max(1, valStart);
         const Xs = applyScaler(trainX, scaler);
@@ -230,28 +287,28 @@ function walkForwardBacktest(closes: number[], ma5: number[], ma20: number[]) {
         for (const alpha of alphas) {
             const coefs = ridgeFit(Xs.slice(0, valStart), yc.slice(0, valStart), alpha);
             let absErr = 0;
-            for (let i = valStart; i < t; i++) {
+            for (let i = valStart; i < trainN; i++) {
                 const pred = yMean + dot(Xs[i], coefs);
                 absErr += Math.abs(pred - trainY[i]);
             }
-            const valMae = absErr / Math.max(1, t - valStart);
+            const valMae = absErr / Math.max(1, trainN - valStart);
             if (valMae < best.valMae) best = { alpha, valMae };
         }
-        // Refit on full train [0, t) with best alpha
+        // Refit on full train with best alpha
         const fullScaler = fitScaler(trainX);
-        const fullYMean = trainY.reduce((a, b) => a + b, 0) / t;
+        const fullYMean = trainY.reduce((a, b) => a + b, 0) / trainN;
         const Xfull = applyScaler(trainX, fullScaler);
         const ycFull = trainY.map(v => v - fullYMean);
         const coefs = ridgeFit(Xfull, ycFull, best.alpha);
 
-        // Predict close[t+1] and score it
+        // Predict log return for day t -> t+1 and score direction
         const predScaled = applyScaler([features(t)], fullScaler)[0];
-        const predNext = fullYMean + dot(predScaled, coefs);
-        const actualNext = closes[t + 1];
+        const predLogRet = fullYMean + dot(predScaled, coefs);
+        const actualLogRet = Math.log(closes[t + 1] / closes[t]);
         const lastClose = closes[t];
 
-        const predUp = predNext > lastClose;
-        const actualUp = actualNext > lastClose;
+        const predUp = predLogRet > 0;
+        const actualUp = actualLogRet > 0;
         const persistUp = lastClose > closes[t - 1];
         const maCrossUp = (ma5[t] || lastClose) > (ma20[t] || lastClose);
 
@@ -261,10 +318,9 @@ function walkForwardBacktest(closes: number[], ma5: number[], ma20: number[]) {
         if (maCrossUp === actualUp) maCrossHits++;
         nSignals++;
 
-        const dailyLogRet = Math.log(actualNext / lastClose);
-        buyHoldLogRet += dailyLogRet;
-        if (predUp) modelLogRet += dailyLogRet;       // long when model says up, flat when down
-        if (maCrossUp) maCrossLogRet += dailyLogRet;  // long when MA5 > MA20, flat when down
+        buyHoldLogRet += actualLogRet;
+        if (predUp) modelLogRet += actualLogRet;       // long when model says up, flat when down
+        if (maCrossUp) maCrossLogRet += actualLogRet;  // long when MA5 > MA20, flat when down
     }
 
     const toPct = (x: number) => parseFloat(((Math.exp(x) - 1) * 100).toFixed(2));
