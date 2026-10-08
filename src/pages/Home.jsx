@@ -16,6 +16,8 @@ const RANGES = [
   { label: "1M", key: "1month",  points: 30 },
   { label: "3M", key: "3months", points: 90 },
   { label: "1Y", key: "1year", points: 252 },
+  { label: "2Y", key: "2years", points: 504 },
+  { label: "5Y", key: "5years", points: 1260 },
 ];
 
 async function fetchPrediction(ticker) {
@@ -46,23 +48,20 @@ Current price: $${lastClose}
 Ridge regression model prediction for next close: $${ridgePred} (expected return: ${ridgeReturnPct.toFixed(2)}%)
 Model test MAE: $${ridge?.model_mae ?? "N/A"} | Best alpha: ${ridge?.best_alpha ?? "N/A"}
 Confidence interval: $${ridge?.confidence_lower ?? "N/A"} - $${ridge?.confidence_upper ?? "N/A"}
-Walk-forward backtest: model direction hit rate ${backtest?.model_hit_rate ?? "N/A"}% vs always-up ${backtest?.always_up_hit_rate ?? "N/A"}% over ${backtest?.n_signals ?? "N/A"} signals; model return ${backtest?.model_return_pct ?? "N/A"}% vs buy-and-hold ${backtest?.buy_hold_return_pct ?? "N/A"}%.
+MODEL SIGNAL: ${ridge?.signal ?? "HOLD"} (confidence: ${ridge?.confidence ?? "LOW"}) — derived from the predicted return vs the stock's 20-day realized volatility; a dead band filters noise.
+Walk-forward backtest: model direction hit rate ${backtest?.model_hit_rate ?? "N/A"}% vs always-up ${backtest?.always_up_hit_rate ?? "N/A"}% over ${backtest?.n_signals ?? "N/A"} signals; model return ${backtest?.model_return_pct ?? "N/A"}% (net of costs) vs buy-and-hold ${backtest?.buy_hold_return_pct ?? "N/A"}%.
 
-Based on this REAL data and the Ridge model's prediction, provide:
-- A trading signal (BUY, SELL, or HOLD) — base this on the Ridge predicted return and the technical indicators (MA5 vs MA20 crossover, momentum)
-- Confidence level (HIGH if Ridge MAE is small relative to the predicted move; MEDIUM/LOW otherwise)
+The trading signal above is FIXED — it comes from the Ridge model, not you. Your job is to EXPLAIN it. Provide:
 - 7-day and 30-day price targets (realistic, near the Ridge prediction)
 - Support and resistance levels (from the recent price range)
-- A brief analysis summary explaining WHY, referencing the Ridge prediction and moving averages
+- A brief analysis summary explaining WHY the model arrived at this ${ridge?.signal ?? "HOLD"} signal, referencing the predicted return, moving averages, and the backtest hit rate
 - Key factors influencing the prediction
 
-The Ridge prediction of $${ridgePred} is the model's forecast — your job is to interpret it, not replace it.`,
+Do not generate a different signal; interpret the model's ${ridge?.signal ?? "HOLD"}.`,
 
     response_json_schema: {
       type: "object",
       properties: {
-        signal: { type: "string", enum: ["BUY", "SELL", "HOLD"] },
-        confidence: { type: "string", enum: ["HIGH", "MEDIUM", "LOW"] },
         price_target_7d: { type: "number" },
         price_target_30d: { type: "number" },
         support_level: { type: "number" },
@@ -70,14 +69,16 @@ The Ridge prediction of $${ridgePred} is the model's forecast — your job is to
         analysis_summary: { type: "string" },
         key_factors: { type: "array", items: { type: "string" } },
       },
-      required: ["signal", "confidence", "analysis_summary"]
+      required: ["analysis_summary"]
     }
   });
 
   return {
     ...result,
+    signal: ridge?.signal ?? "HOLD",
+    confidence: ridge?.confidence ?? "LOW",
     predicted_next_close: ridgePred,
-    predicted_return_pct: parseFloat(ridgeReturnPct.toFixed(2)),
+    predicted_return_pct: ridge?.predicted_return_pct ?? parseFloat(ridgeReturnPct.toFixed(2)),
     model_mae: ridge?.model_mae ?? null,
     best_alpha: ridge?.best_alpha ?? null,
     confidence_lower: ridge?.confidence_lower ?? null,

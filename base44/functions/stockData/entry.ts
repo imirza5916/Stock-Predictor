@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
     if (!ticker) return Response.json({ error: 'Ticker required' }, { status: 400 });
 
     // Fetch 3 months of daily data from Yahoo Finance
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker.toUpperCase()}?interval=1d&range=1y`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker.toUpperCase()}?interval=1d&range=5y`;
     const res = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0' }
     });
@@ -312,21 +312,35 @@ function computeRidgePrediction(closes: number[], volumes: number[], ma5: number
     const predLogRet = finalYMean + dot(lastScaled, finalCoefs);
     const predictedNext = closes[n - 1] * Math.exp(predLogRet);
 
+    // Calibrated signal: dead band scaled to the asset's own 20-day realized volatility,
+    // so a predicted move only counts as a signal if it exceeds half a typical day's noise.
+    const recentVol = vol[n - 1] || 0.01;
+    const threshold = 0.5 * recentVol;
+    const signal = predLogRet > threshold ? "BUY" : predLogRet < -threshold ? "SELL" : "HOLD";
+    const ratio = recentVol > 0 ? Math.abs(predLogRet) / recentVol : 0;
+    const confidence = ratio > 1.0 ? "HIGH" : ratio > 0.5 ? "MEDIUM" : "LOW";
+
     return {
         predicted_next_close: parseFloat(predictedNext.toFixed(2)),
+        predicted_return_pct: parseFloat(((Math.exp(predLogRet) - 1) * 100).toFixed(2)),
         model_mae: parseFloat(testMae.toFixed(3)),
         best_alpha: best.alpha,
+        signal,
+        confidence,
         confidence_lower: parseFloat((predictedNext - testMae).toFixed(2)),
         confidence_upper: parseFloat((predictedNext + testMae).toFixed(2)),
     };
 }
 
-// Walk-forward backtest: refit each day on all prior data, predict next-day direction.
-// Compares Ridge, Lasso, k-NN, and their ensemble against baselines.
+// Walk-forward backtest with a rolling 252-day training window (adapts to regime changes,
+// caps compute over 5y). Compares Ridge, Lasso, k-NN, and their ensemble vs baselines.
+// Transaction costs: 5 bps per position change (long/flat, no shorting).
 function walkForwardBacktest(closes: number[], volumes: number[], ma5: number[], ma20: number[]) {
     const n = closes.length;
     const featureStart = 20;
     const minTrain = 30;
+    const windowSize = 252;
+    const COST = 0.0005; // 5 bps per trade
     if (n < featureStart + minTrain + 5) return null;
 
     const rsi = computeRSI(closes, 14);
@@ -337,11 +351,14 @@ function walkForwardBacktest(closes: number[], volumes: number[], ma5: number[],
 
     const c = { ridge: 0, lasso: 0, knn: 0, ens: 0, alwaysUp: 0, persist: 0, maCross: 0, n: 0 };
     const r = { ridge: 0, lasso: 0, knn: 0, ens: 0, buyHold: 0, maCross: 0 };
+    const tr = { ridge: 0, lasso: 0, knn: 0, ens: 0, buyHold: 0, maCross: 0 };
+    let posRidge = 0, posLasso = 0, posKnn = 0, posEns = 0, posMaCross = 0, posBuyHold = 0;
 
     for (let t = featureStart + minTrain; t < n - 1; t++) {
+        const trainStart = Math.max(featureStart, t - windowSize);
         const trainX: number[][] = [];
         const trainY: number[] = [];
-        for (let i = featureStart; i < t; i++) {
+        for (let i = trainStart; i < t; i++) {
             trainX.push(features(i));
             trainY.push(Math.log(closes[i + 1] / closes[i]));
         }
@@ -377,12 +394,30 @@ function walkForwardBacktest(closes: number[], volumes: number[], ma5: number[],
         if (maCrossUp === actualUp) c.maCross++;
         c.n++;
 
+        // Buy & hold: long from first day, one entry cost
+        if (posBuyHold === 0) { r.buyHold -= COST; tr.buyHold++; posBuyHold = 1; }
         r.buyHold += actualLogRet;
-        if (maCrossUp) r.maCross += actualLogRet;
-        if (ridgePred > 0) r.ridge += actualLogRet;
-        if (lassoPred > 0) r.lasso += actualLogRet;
-        if (knnPred > 0) r.knn += actualLogRet;
-        if (ensPred > 0) r.ens += actualLogRet;
+
+        // Long/flat strategies with 5 bps per position change
+        let nR = ridgePred > 0 ? 1 : 0;
+        if (nR !== posRidge) { r.ridge -= COST; tr.ridge++; posRidge = nR; }
+        if (nR) r.ridge += actualLogRet;
+
+        let nL = lassoPred > 0 ? 1 : 0;
+        if (nL !== posLasso) { r.lasso -= COST; tr.lasso++; posLasso = nL; }
+        if (nL) r.lasso += actualLogRet;
+
+        let nK = knnPred > 0 ? 1 : 0;
+        if (nK !== posKnn) { r.knn -= COST; tr.knn++; posKnn = nK; }
+        if (nK) r.knn += actualLogRet;
+
+        let nE = ensPred > 0 ? 1 : 0;
+        if (nE !== posEns) { r.ens -= COST; tr.ens++; posEns = nE; }
+        if (nE) r.ens += actualLogRet;
+
+        let nM = maCrossUp ? 1 : 0;
+        if (nM !== posMaCross) { r.maCross -= COST; tr.maCross++; posMaCross = nM; }
+        if (nM) r.maCross += actualLogRet;
     }
 
     const toPct = (x: number) => parseFloat(((Math.exp(x) - 1) * 100).toFixed(2));
@@ -396,11 +431,14 @@ function walkForwardBacktest(closes: number[], volumes: number[], ma5: number[],
         ma_cross_hit_rate: hr(c.maCross),
         buy_hold_return_pct: toPct(r.buyHold),
         ma_cross_return_pct: toPct(r.maCross),
+        cost_bps: 5,
         models: [
-            { name: "Ridge", hit_rate: hr(c.ridge), return_pct: toPct(r.ridge) },
-            { name: "Lasso", hit_rate: hr(c.lasso), return_pct: toPct(r.lasso) },
-            { name: "k-NN", hit_rate: hr(c.knn), return_pct: toPct(r.knn) },
-            { name: "Ensemble", hit_rate: hr(c.ens), return_pct: toPct(r.ens) },
+            { name: "Ridge", hit_rate: hr(c.ridge), return_pct: toPct(r.ridge), trades: tr.ridge },
+            { name: "Lasso", hit_rate: hr(c.lasso), return_pct: toPct(r.lasso), trades: tr.lasso },
+            { name: "k-NN", hit_rate: hr(c.knn), return_pct: toPct(r.knn), trades: tr.knn },
+            { name: "Ensemble", hit_rate: hr(c.ens), return_pct: toPct(r.ens), trades: tr.ens },
+            { name: "MA Crossover", hit_rate: hr(c.maCross), return_pct: toPct(r.maCross), trades: tr.maCross },
+            { name: "Buy & Hold", hit_rate: null, return_pct: toPct(r.buyHold), trades: tr.buyHold },
         ],
     };
 }
