@@ -22,31 +22,42 @@ async function fetchPrediction(ticker) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const predDate = tomorrow.toISOString().split("T")[0];
 
-  // Step 1: Fetch real price data from Yahoo Finance
+  // Step 1: Fetch real price data + Ridge regression prediction from backend
   const stockRes = await base44.functions.invoke("stockData", { ticker });
-  const { chartData, lastClose, companyName } = stockRes.data;
+  const { chartData, lastClose, companyName, ridge } = stockRes.data;
 
-  // Step 2: Ask LLM for analysis only (no chart data needed from LLM)
+  // The Ridge model's prediction is the deterministic anchor
+  const ridgePred = ridge?.predicted_next_close ?? lastClose;
+  const ridgeReturnPct = ((ridgePred - lastClose) / lastClose) * 100;
+
+  // Build a compact recent-price summary for the LLM
+  const recent = chartData.slice(-20).map(d => `${d.date}: $${d.close} (MA5:${d.ma5}, MA20:${d.ma20})`).join("\n");
+
+  // Step 2: LLM provides qualitative analysis grounded in real data + Ridge prediction
   const result = await base44.integrations.Core.InvokeLLM({
-    prompt: `You are a professional stock market analyst. The stock ticker is "${ticker}" (${companyName}) listed on NASDAQ or NYSE.
-The current/last close price is $${lastClose}.
+    prompt: `You are a professional stock market analyst. Analyze "${ticker}" (${companyName}).
 
-Based on this real price and your knowledge of this stock, provide:
-- A predicted next-day closing price (must be realistic relative to the current price of $${lastClose})
-- A trading signal (BUY, SELL, or HOLD)
-- Confidence level
-- 7-day and 30-day price targets
-- Support and resistance levels
-- A brief analysis summary
+REAL MARKET DATA (last 20 trading days, date: close (MA5, MA20)):
+${recent}
+
+Current price: $${lastClose}
+Ridge regression model prediction for next close: $${ridgePred} (expected return: ${ridgeReturnPct.toFixed(2)}%)
+Model test MAE: $${ridge?.model_mae ?? "N/A"} | Best alpha: ${ridge?.best_alpha ?? "N/A"}
+Confidence interval: $${ridge?.confidence_lower ?? "N/A"} - $${ridge?.confidence_upper ?? "N/A"}
+
+Based on this REAL data and the Ridge model's prediction, provide:
+- A trading signal (BUY, SELL, or HOLD) — base this on the Ridge predicted return and the technical indicators (MA5 vs MA20 crossover, momentum)
+- Confidence level (HIGH if Ridge MAE is small relative to the predicted move; MEDIUM/LOW otherwise)
+- 7-day and 30-day price targets (realistic, near the Ridge prediction)
+- Support and resistance levels (from the recent price range)
+- A brief analysis summary explaining WHY, referencing the Ridge prediction and moving averages
 - Key factors influencing the prediction
 
-All prices MUST be realistic and proportional to the current price of $${lastClose}.`,
+The Ridge prediction of $${ridgePred} is the model's forecast — your job is to interpret it, not replace it.`,
 
     response_json_schema: {
       type: "object",
       properties: {
-        predicted_next_close: { type: "number" },
-        predicted_return_pct: { type: "number" },
         signal: { type: "string", enum: ["BUY", "SELL", "HOLD"] },
         confidence: { type: "string", enum: ["HIGH", "MEDIUM", "LOW"] },
         price_target_7d: { type: "number" },
@@ -56,15 +67,18 @@ All prices MUST be realistic and proportional to the current price of $${lastClo
         analysis_summary: { type: "string" },
         key_factors: { type: "array", items: { type: "string" } },
       },
-      required: ["predicted_next_close", "predicted_return_pct", "signal", "analysis_summary"]
+      required: ["signal", "confidence", "analysis_summary"]
     }
   });
 
-  const returnPct = ((result.predicted_next_close - lastClose) / lastClose) * 100;
-
   return {
     ...result,
-    predicted_return_pct: parseFloat(returnPct.toFixed(2)),
+    predicted_next_close: ridgePred,
+    predicted_return_pct: parseFloat(ridgeReturnPct.toFixed(2)),
+    model_mae: ridge?.model_mae ?? null,
+    best_alpha: ridge?.best_alpha ?? null,
+    confidence_lower: ridge?.confidence_lower ?? null,
+    confidence_upper: ridge?.confidence_upper ?? null,
     ticker: ticker.toUpperCase(),
     company_name: companyName,
     current_price: lastClose,
