@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
         volume: volumes[i] || null,
     })).filter(d => d.close != null);
 
-    // Calculate moving averages
+    // Calculate moving averages (trailing windows only — no lookahead)
     const chartData = rawData.map((d, i) => {
         const slice5 = rawData.slice(Math.max(0, i - 4), i + 1).map(x => x.close);
         const slice20 = rawData.slice(Math.max(0, i - 19), i + 1).map(x => x.close);
@@ -54,10 +54,12 @@ Deno.serve(async (req) => {
 });
 
 // ---------- Ridge Regression helpers ----------
+// Linear algebra primitives (small matrices, no external deps)
 function dot(a: number[], b: number[]): number {
     return a.reduce((s, v, i) => s + v * b[i], 0);
 }
 
+// Solve A x = b via Gaussian elimination with partial pivoting
 function solveLinear(A: number[][], b: number[]): number[] {
     const n = A.length;
     const aug = A.map((row, i) => [...row, b[i]]);
@@ -82,6 +84,7 @@ function solveLinear(A: number[][], b: number[]): number[] {
     return x;
 }
 
+// Ridge: beta = (XᵀX + alpha I)⁻¹ Xᵀy  (no intercept column; intercept handled by target centering)
 function ridgeFit(X: number[][], y: number[], alpha: number): number[] {
     const k = X[0].length;
     const XtX = Array(k).fill(0).map(() => Array(k).fill(0));
@@ -98,56 +101,93 @@ function ridgeFit(X: number[][], y: number[], alpha: number): number[] {
     return solveLinear(XtX, Xty);
 }
 
+// Standardize features: mean/std computed from a TRAINING window only (no lookahead)
+function fitScaler(X: number[][]): { mean: number[]; std: number[] } {
+    const k = X[0].length;
+    const mean = Array(k).fill(0);
+    const std = Array(k).fill(0);
+    for (let i = 0; i < X.length; i++) for (let j = 0; j < k; j++) mean[j] += X[i][j];
+    for (let j = 0; j < k; j++) mean[j] /= X.length;
+    for (let i = 0; i < X.length; i++) for (let j = 0; j < k; j++) std[j] += (X[i][j] - mean[j]) ** 2;
+    for (let j = 0; j < k; j++) {
+        std[j] = Math.sqrt(std[j] / X.length);
+        if (std[j] < 1e-8) std[j] = 1; // guard constant columns
+    }
+    return { mean, std };
+}
+
+function applyScaler(X: number[][], s: { mean: number[]; std: number[] }): number[][] {
+    return X.map(row => row.map((v, j) => (v - s.mean[j]) / s.std[j]));
+}
+
+// 3-way chronological split: train (60%) -> pick alpha on validation (20%) -> report MAE on test (20%, touched once)
 function computeRidgePrediction(closes: number[], ma5: number[], ma20: number[]) {
     const n = closes.length;
     if (n < 30) return null;
 
-    // Features: [intercept, close, ma5, ma20, lag1 (prev close), 5d return]
+    // Features (no intercept column — intercept handled via target centering):
+    // [close, ma5, ma20, lag1 (prev close), 5d return]
     const features = (i: number): number[] => {
         const lag1 = i > 0 ? closes[i - 1] : closes[i];
         const ret5d = i >= 5 ? (closes[i] - closes[i - 5]) / closes[i - 5] : 0;
-        return [1, closes[i], ma5[i] || closes[i], ma20[i] || closes[i], lag1, ret5d];
+        return [closes[i], ma5[i] || closes[i], ma20[i] || closes[i], lag1, ret5d];
     };
 
-    const splitIdx = Math.floor(n * 0.8);
-    const alphas = [0.01, 0.1, 1, 10, 100, 1000];
-    let best = { alpha: 1, mae: Infinity };
-
-    for (const alpha of alphas) {
-        const X: number[][] = [];
-        const y: number[] = [];
-        for (let i = 0; i < splitIdx - 1; i++) {
-            X.push(features(i));
-            y.push(closes[i + 1]);
-        }
-        const coefs = ridgeFit(X, y, alpha);
-
-        let absErr = 0;
-        let count = 0;
-        for (let i = splitIdx; i < n - 1; i++) {
-            const pred = dot(features(i), coefs);
-            absErr += Math.abs(pred - closes[i + 1]);
-            count++;
-        }
-        const mae = count > 0 ? absErr / count : Infinity;
-        if (mae < best.mae) best = { alpha, mae };
-    }
-
-    // Retrain on ALL data with best alpha, predict next day
-    const X: number[][] = [];
-    const y: number[] = [];
+    // Supervised rows: predict close[i+1] from features known at the close of day i
+    const allX: number[][] = [];
+    const allY: number[] = [];
     for (let i = 0; i < n - 1; i++) {
-        X.push(features(i));
-        y.push(closes[i + 1]);
+        allX.push(features(i));
+        allY.push(closes[i + 1]);
     }
-    const finalCoefs = ridgeFit(X, y, best.alpha);
-    const predictedNext = dot(features(n - 1), finalCoefs);
+    const m = allX.length;
+
+    const trainEnd = Math.floor(m * 0.6);
+    const valEnd = Math.floor(m * 0.8);
+
+    // Fit scaler + target mean on TRAIN only
+    const scaler = fitScaler(allX.slice(0, trainEnd));
+    const yTrainMean = allY.slice(0, trainEnd).reduce((a, b) => a + b, 0) / trainEnd;
+    const Xs = applyScaler(allX, scaler);
+    const yc = allY.map(v => v - yTrainMean);
+
+    // Select alpha on VALIDATION (test set untouched)
+    const alphas = [0.01, 0.1, 1, 10, 100, 1000];
+    let best = { alpha: 1, valMae: Infinity };
+    for (const alpha of alphas) {
+        const coefs = ridgeFit(Xs.slice(0, trainEnd), yc.slice(0, trainEnd), alpha);
+        let absErr = 0;
+        for (let i = trainEnd; i < valEnd; i++) {
+            const pred = yTrainMean + dot(Xs[i], coefs);
+            absErr += Math.abs(pred - allY[i]);
+        }
+        const valMae = absErr / (valEnd - trainEnd);
+        if (valMae < best.valMae) best = { alpha, valMae };
+    }
+
+    // Retrain on TRAIN+VALIDATION with best alpha; report MAE on TEST once
+    const finalScaler = fitScaler(allX.slice(0, valEnd));
+    const finalYMean = allY.slice(0, valEnd).reduce((a, b) => a + b, 0) / valEnd;
+    const Xfinal = applyScaler(allX, finalScaler);
+    const ycFinal = allY.map(v => v - finalYMean);
+    const finalCoefs = ridgeFit(Xfinal.slice(0, valEnd), ycFinal.slice(0, valEnd), best.alpha);
+    let testAbsErr = 0, testCount = 0;
+    for (let i = valEnd; i < m; i++) {
+        const pred = finalYMean + dot(Xfinal[i], finalCoefs);
+        testAbsErr += Math.abs(pred - allY[i]);
+        testCount++;
+    }
+    const testMae = testCount > 0 ? testAbsErr / testCount : best.valMae;
+
+    // Predict next day after the last available close
+    const lastScaled = applyScaler([features(n - 1)], finalScaler)[0];
+    const predictedNext = finalYMean + dot(lastScaled, finalCoefs);
 
     return {
         predicted_next_close: parseFloat(predictedNext.toFixed(2)),
-        model_mae: parseFloat(best.mae.toFixed(3)),
+        model_mae: parseFloat(testMae.toFixed(3)),
         best_alpha: best.alpha,
-        confidence_lower: parseFloat((predictedNext - best.mae).toFixed(2)),
-        confidence_upper: parseFloat((predictedNext + best.mae).toFixed(2)),
+        confidence_lower: parseFloat((predictedNext - testMae).toFixed(2)),
+        confidence_upper: parseFloat((predictedNext + testMae).toFixed(2)),
     };
 }
