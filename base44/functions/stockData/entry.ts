@@ -178,6 +178,76 @@ function buildFeatures(closes: number[], volumes: number[], ma5: number[], ma20:
     };
 }
 
+// Lasso (L1) via coordinate descent on the Gram matrix — tests whether sparse feature
+// selection outperforms Ridge's shrink-all. Same standardized features / centered target.
+function lassoFit(X: number[][], y: number[], alpha: number, maxIter = 50, tol = 1e-4): number[] {
+    const n = X.length;
+    const k = X[0].length;
+    const G = Array(k).fill(0).map(() => Array(k).fill(0));
+    const Xty = Array(k).fill(0);
+    for (let i = 0; i < n; i++) {
+        for (let a = 0; a < k; a++) {
+            Xty[a] += X[i][a] * y[i];
+            for (let b = a; b < k; b++) G[a][b] += X[i][a] * X[i][b];
+        }
+    }
+    for (let a = 0; a < k; a++) for (let b = 0; b < a; b++) G[a][b] = G[b][a];
+    const soft = (v: number, t: number) => Math.sign(v) * Math.max(0, Math.abs(v) - t);
+    const beta = Array(k).fill(0);
+    for (let iter = 0; iter < maxIter; iter++) {
+        let maxChange = 0;
+        for (let j = 0; j < k; j++) {
+            const d = G[j][j];
+            if (d < 1e-12) continue;
+            let rho = Xty[j];
+            for (let l = 0; l < k; l++) if (l !== j) rho -= G[j][l] * beta[l];
+            const old = beta[j];
+            beta[j] = soft(rho, alpha) / d;
+            const diff = Math.abs(beta[j] - old);
+            if (diff > maxChange) maxChange = diff;
+        }
+        if (maxChange < tol) break;
+    }
+    return beta;
+}
+
+// k-Nearest-Neighbors (k=5) in standardized feature space — non-parametric contrast to
+// the linear models. Predicts the average target of the 5 closest training rows.
+function knnPredict(X: number[][], y: number[], query: number[], k: number): number {
+    const dists = X.map((row, i) => ({ d: row.reduce((s, v, j) => s + (v - query[j]) ** 2, 0), y: y[i] }));
+    dists.sort((a, b) => a.d - b.d);
+    const top = dists.slice(0, Math.min(k, dists.length));
+    return top.reduce((s, t) => s + t.y, 0) / top.length;
+}
+
+// Fit a model with nested alpha selection: pick alpha on validation (last 20% of train),
+// refit on the full train. Returns coefficients + the full-train scaler/mean for prediction.
+function fitModel(fitFn: (X: number[][], y: number[], a: number) => number[],
+                  trainX: number[][], trainY: number[], valStart: number, alphas: number[]) {
+    const trainN = trainX.length;
+    const valScaler = fitScaler(trainX.slice(0, valStart));
+    const valYMean = trainY.slice(0, valStart).reduce((a, b) => a + b, 0) / Math.max(1, valStart);
+    const XsVal = applyScaler(trainX, valScaler);
+    const ycVal = trainY.map(v => v - valYMean);
+    let best = { alpha: alphas[0], valMae: Infinity };
+    for (const alpha of alphas) {
+        const coefs = fitFn(XsVal.slice(0, valStart), ycVal.slice(0, valStart), alpha);
+        let absErr = 0;
+        for (let i = valStart; i < trainN; i++) {
+            const pred = valYMean + dot(XsVal[i], coefs);
+            absErr += Math.abs(pred - trainY[i]);
+        }
+        const valMae = absErr / Math.max(1, trainN - valStart);
+        if (valMae < best.valMae) best = { alpha, valMae };
+    }
+    const fullScaler = fitScaler(trainX);
+    const fullYMean = trainY.reduce((a, b) => a + b, 0) / trainN;
+    const XsFull = applyScaler(trainX, fullScaler);
+    const ycFull = trainY.map(v => v - fullYMean);
+    const finalCoefs = fitFn(XsFull, ycFull, best.alpha);
+    return { coefs: finalCoefs, yMean: fullYMean, scaler: fullScaler };
+}
+
 // 3-way chronological split: train (60%) -> pick alpha on validation (20%) -> report MAE on test (20%, touched once)
 // Target = next-day log return (stationary); price MAE reported for interpretability.
 function computeRidgePrediction(closes: number[], volumes: number[], ma5: number[], ma20: number[]) {
@@ -252,23 +322,23 @@ function computeRidgePrediction(closes: number[], volumes: number[], ma5: number
 }
 
 // Walk-forward backtest: refit each day on all prior data, predict next-day direction.
-// Target = next-day log return; direction = sign of predicted return.
+// Compares Ridge, Lasso, k-NN, and their ensemble against baselines.
 function walkForwardBacktest(closes: number[], volumes: number[], ma5: number[], ma20: number[]) {
     const n = closes.length;
     const featureStart = 20;
-    const minTrain = 30; // training rows
+    const minTrain = 30;
     if (n < featureStart + minTrain + 5) return null;
 
     const rsi = computeRSI(closes, 14);
     const vol = computeRealizedVol(closes, 20);
     const features = buildFeatures(closes, volumes, ma5, ma20, rsi, vol);
-    const alphas = [0.01, 0.1, 1, 10, 100, 1000];
+    const ridgeAlphas = [0.01, 0.1, 1, 10, 100, 1000];
+    const lassoAlphas = [0.01, 0.1, 1, 10];
 
-    let modelHits = 0, alwaysUpHits = 0, persistHits = 0, maCrossHits = 0, nSignals = 0;
-    let modelLogRet = 0, buyHoldLogRet = 0, maCrossLogRet = 0;
+    const c = { ridge: 0, lasso: 0, knn: 0, ens: 0, alwaysUp: 0, persist: 0, maCross: 0, n: 0 };
+    const r = { ridge: 0, lasso: 0, knn: 0, ens: 0, buyHold: 0, maCross: 0 };
 
     for (let t = featureStart + minTrain; t < n - 1; t++) {
-        // Training rows: features(i) -> log return(i -> i+1), for i in [featureStart, t)
         const trainX: number[][] = [];
         const trainY: number[] = [];
         for (let i = featureStart; i < t; i++) {
@@ -276,62 +346,61 @@ function walkForwardBacktest(closes: number[], volumes: number[], ma5: number[],
             trainY.push(Math.log(closes[i + 1] / closes[i]));
         }
         const trainN = trainX.length;
-        // Nested validation: last 20% of train picks alpha (test day untouched)
         const valStart = Math.floor(trainN * 0.8);
-        const scaler = fitScaler(trainX.slice(0, valStart));
-        const yMean = trainY.slice(0, valStart).reduce((a, b) => a + b, 0) / Math.max(1, valStart);
-        const Xs = applyScaler(trainX, scaler);
-        const yc = trainY.map(v => v - yMean);
 
-        let best = { alpha: 1, valMae: Infinity };
-        for (const alpha of alphas) {
-            const coefs = ridgeFit(Xs.slice(0, valStart), yc.slice(0, valStart), alpha);
-            let absErr = 0;
-            for (let i = valStart; i < trainN; i++) {
-                const pred = yMean + dot(Xs[i], coefs);
-                absErr += Math.abs(pred - trainY[i]);
-            }
-            const valMae = absErr / Math.max(1, trainN - valStart);
-            if (valMae < best.valMae) best = { alpha, valMae };
-        }
-        // Refit on full train with best alpha
-        const fullScaler = fitScaler(trainX);
-        const fullYMean = trainY.reduce((a, b) => a + b, 0) / trainN;
-        const Xfull = applyScaler(trainX, fullScaler);
-        const ycFull = trainY.map(v => v - fullYMean);
-        const coefs = ridgeFit(Xfull, ycFull, best.alpha);
+        const ridgeM = fitModel(ridgeFit, trainX, trainY, valStart, ridgeAlphas);
+        const lassoM = fitModel(lassoFit, trainX, trainY, valStart, lassoAlphas);
+        const query = features(t);
+        const ridgePred = ridgeM.yMean + dot(applyScaler([query], ridgeM.scaler)[0], ridgeM.coefs);
+        const lassoPred = lassoM.yMean + dot(applyScaler([query], lassoM.scaler)[0], lassoM.coefs);
 
-        // Predict log return for day t -> t+1 and score direction
-        const predScaled = applyScaler([features(t)], fullScaler)[0];
-        const predLogRet = fullYMean + dot(predScaled, coefs);
+        // k-NN in standardized feature space
+        const knnScaler = fitScaler(trainX);
+        const knnXs = applyScaler(trainX, knnScaler);
+        const knnQuery = applyScaler([query], knnScaler)[0];
+        const knnPred = knnPredict(knnXs, trainY, knnQuery, 5);
+
+        const ensPred = (ridgePred + lassoPred + knnPred) / 3;
         const actualLogRet = Math.log(closes[t + 1] / closes[t]);
         const lastClose = closes[t];
 
-        const predUp = predLogRet > 0;
         const actualUp = actualLogRet > 0;
         const persistUp = lastClose > closes[t - 1];
         const maCrossUp = (ma5[t] || lastClose) > (ma20[t] || lastClose);
 
-        if (predUp === actualUp) modelHits++;
-        if (actualUp) alwaysUpHits++;
-        if (persistUp === actualUp) persistHits++;
-        if (maCrossUp === actualUp) maCrossHits++;
-        nSignals++;
+        if ((ridgePred > 0) === actualUp) c.ridge++;
+        if ((lassoPred > 0) === actualUp) c.lasso++;
+        if ((knnPred > 0) === actualUp) c.knn++;
+        if ((ensPred > 0) === actualUp) c.ens++;
+        if (actualUp) c.alwaysUp++;
+        if (persistUp === actualUp) c.persist++;
+        if (maCrossUp === actualUp) c.maCross++;
+        c.n++;
 
-        buyHoldLogRet += actualLogRet;
-        if (predUp) modelLogRet += actualLogRet;       // long when model says up, flat when down
-        if (maCrossUp) maCrossLogRet += actualLogRet;  // long when MA5 > MA20, flat when down
+        r.buyHold += actualLogRet;
+        if (maCrossUp) r.maCross += actualLogRet;
+        if (ridgePred > 0) r.ridge += actualLogRet;
+        if (lassoPred > 0) r.lasso += actualLogRet;
+        if (knnPred > 0) r.knn += actualLogRet;
+        if (ensPred > 0) r.ens += actualLogRet;
     }
 
     const toPct = (x: number) => parseFloat(((Math.exp(x) - 1) * 100).toFixed(2));
+    const hr = (x: number) => parseFloat((x / c.n * 100).toFixed(1));
     return {
-        n_signals: nSignals,
-        model_hit_rate: parseFloat((modelHits / nSignals * 100).toFixed(1)),
-        always_up_hit_rate: parseFloat((alwaysUpHits / nSignals * 100).toFixed(1)),
-        persistence_hit_rate: parseFloat((persistHits / nSignals * 100).toFixed(1)),
-        ma_cross_hit_rate: parseFloat((maCrossHits / nSignals * 100).toFixed(1)),
-        model_return_pct: toPct(modelLogRet),
-        buy_hold_return_pct: toPct(buyHoldLogRet),
-        ma_cross_return_pct: toPct(maCrossLogRet),
+        n_signals: c.n,
+        model_hit_rate: hr(c.ridge),
+        model_return_pct: toPct(r.ridge),
+        always_up_hit_rate: hr(c.alwaysUp),
+        persistence_hit_rate: hr(c.persist),
+        ma_cross_hit_rate: hr(c.maCross),
+        buy_hold_return_pct: toPct(r.buyHold),
+        ma_cross_return_pct: toPct(r.maCross),
+        models: [
+            { name: "Ridge", hit_rate: hr(c.ridge), return_pct: toPct(r.ridge) },
+            { name: "Lasso", hit_rate: hr(c.lasso), return_pct: toPct(r.lasso) },
+            { name: "k-NN", hit_rate: hr(c.knn), return_pct: toPct(r.knn) },
+            { name: "Ensemble", hit_rate: hr(c.ens), return_pct: toPct(r.ens) },
+        ],
     };
 }
