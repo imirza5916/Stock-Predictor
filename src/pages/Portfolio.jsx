@@ -15,22 +15,18 @@ const SIGNAL_STYLE = {
 };
 
 async function fetchLiveData(ticker) {
+  // Use the deterministic Ridge model output from stockData — no LLM credits spent here.
   const stockRes = await base44.functions.invoke("stockData", { ticker });
-  const { lastClose, companyName } = stockRes.data;
-  const result = await base44.integrations.Core.InvokeLLM({
-    prompt: `Stock analyst: ticker "${ticker}" (${companyName}), current price $${lastClose}. Give predicted next close, return %, signal (BUY/SELL/HOLD), confidence.`,
-    response_json_schema: {
-      type: "object",
-      properties: {
-        predicted_next_close: { type: "number" },
-        predicted_return_pct: { type: "number" },
-        signal: { type: "string", enum: ["BUY", "SELL", "HOLD"] },
-        confidence: { type: "string", enum: ["HIGH", "MEDIUM", "LOW"] },
-      },
-      required: ["predicted_next_close", "predicted_return_pct", "signal", "confidence"]
-    }
-  });
-  return { ...result, ticker: ticker.toUpperCase(), company_name: companyName, last_price: lastClose };
+  const { lastClose, companyName, ridge } = stockRes.data;
+  return {
+    ticker: ticker.toUpperCase(),
+    company_name: companyName,
+    last_price: lastClose,
+    predicted_next_close: ridge?.predicted_next_close ?? lastClose,
+    predicted_return_pct: ridge?.predicted_return_pct ?? 0,
+    signal: ridge?.signal ?? "HOLD",
+    confidence: ridge?.confidence ?? "LOW",
+  };
 }
 
 export default function Portfolio() {

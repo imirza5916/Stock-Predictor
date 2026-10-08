@@ -21,76 +21,14 @@ const RANGES = [
 ];
 
 async function fetchPrediction(ticker) {
-  const today = new Date();
-  const tomorrow = new Date(today);
+  const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const predDate = tomorrow.toISOString().split("T")[0];
 
-  // Step 1: Fetch real price data + Ridge regression prediction from backend
-  const stockRes = await base44.functions.invoke("stockData", { ticker });
-  const { chartData, lastClose, companyName, ridge, backtest } = stockRes.data;
-
-  // The Ridge model's prediction is the deterministic anchor
-  const ridgePred = ridge?.predicted_next_close ?? lastClose;
-  const ridgeReturnPct = ((ridgePred - lastClose) / lastClose) * 100;
-
-  // Build a compact recent-price summary for the LLM
-  const recent = chartData.slice(-20).map(d => `${d.date}: $${d.close} (MA5:${d.ma5}, MA20:${d.ma20})`).join("\n");
-
-  // Step 2: LLM provides qualitative analysis grounded in real data + Ridge prediction
-  const result = await base44.integrations.Core.InvokeLLM({
-    prompt: `You are a professional stock market analyst. Analyze "${ticker}" (${companyName}).
-
-REAL MARKET DATA (last 20 trading days, date: close (MA5, MA20)):
-${recent}
-
-Current price: $${lastClose}
-Ridge regression model prediction for next close: $${ridgePred} (expected return: ${ridgeReturnPct.toFixed(2)}%)
-Model test MAE: $${ridge?.model_mae ?? "N/A"} | Best alpha: ${ridge?.best_alpha ?? "N/A"}
-Confidence interval: $${ridge?.confidence_lower ?? "N/A"} - $${ridge?.confidence_upper ?? "N/A"}
-MODEL SIGNAL: ${ridge?.signal ?? "HOLD"} (confidence: ${ridge?.confidence ?? "LOW"}) — derived from the predicted return vs the stock's 20-day realized volatility; a dead band filters noise.
-Walk-forward backtest: model direction hit rate ${backtest?.model_hit_rate ?? "N/A"}% vs always-up ${backtest?.always_up_hit_rate ?? "N/A"}% over ${backtest?.n_signals ?? "N/A"} signals; model return ${backtest?.model_return_pct ?? "N/A"}% (net of costs) vs buy-and-hold ${backtest?.buy_hold_return_pct ?? "N/A"}%.
-
-The trading signal above is FIXED — it comes from the Ridge model, not you. Your job is to EXPLAIN it. Provide:
-- 7-day and 30-day price targets (realistic, near the Ridge prediction)
-- Support and resistance levels (from the recent price range)
-- A brief analysis summary explaining WHY the model arrived at this ${ridge?.signal ?? "HOLD"} signal, referencing the predicted return, moving averages, and the backtest hit rate
-- Key factors influencing the prediction
-
-Do not generate a different signal; interpret the model's ${ridge?.signal ?? "HOLD"}.`,
-
-    response_json_schema: {
-      type: "object",
-      properties: {
-        price_target_7d: { type: "number" },
-        price_target_30d: { type: "number" },
-        support_level: { type: "number" },
-        resistance_level: { type: "number" },
-        analysis_summary: { type: "string" },
-        key_factors: { type: "array", items: { type: "string" } },
-      },
-      required: ["analysis_summary"]
-    }
-  });
-
-  return {
-    ...result,
-    signal: ridge?.signal ?? "HOLD",
-    confidence: ridge?.confidence ?? "LOW",
-    predicted_next_close: ridgePred,
-    predicted_return_pct: ridge?.predicted_return_pct ?? parseFloat(ridgeReturnPct.toFixed(2)),
-    model_mae: ridge?.model_mae ?? null,
-    best_alpha: ridge?.best_alpha ?? null,
-    confidence_lower: ridge?.confidence_lower ?? null,
-    confidence_upper: ridge?.confidence_upper ?? null,
-    ticker: ticker.toUpperCase(),
-    company_name: companyName,
-    current_price: lastClose,
-    last_close: lastClose,
-    prediction_date: predDate,
-    backtest,
-    chart_data: chartData,
-  };
+  // Backend function handles market data + Ridge prediction + LLM analysis
+  // (integration credits spent server-side, not in the client).
+  const res = await base44.functions.invoke("analyzeStock", { ticker });
+  return { ...res.data, prediction_date: predDate };
 }
 
 export default function Home() {
