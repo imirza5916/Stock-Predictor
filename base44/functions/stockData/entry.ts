@@ -8,8 +8,16 @@ Deno.serve(async (req) => {
     const { ticker } = await req.json();
     if (!ticker) return Response.json({ error: 'Ticker required' }, { status: 400 });
 
-    // Fetch 3 months of daily data from Yahoo Finance
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker.toUpperCase()}?interval=1d&range=5y`;
+    // Validate ticker before interpolating into the outbound URL: only plain
+    // exchange symbols (letters, digits, ., -, ^, =) up to 15 chars are allowed,
+    // so path/query separators (?, &, #, /, %2F) cannot alter the request.
+    const symbol = String(ticker).toUpperCase();
+    if (!/^[A-Z0-9.\-^=]{1,15}$/.test(symbol)) {
+        return Response.json({ error: 'Invalid ticker' }, { status: 400 });
+    }
+
+    // Fetch 5 years of daily data from Yahoo Finance
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=5y`;
     const res = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0' }
     });
@@ -42,7 +50,7 @@ Deno.serve(async (req) => {
     });
 
     const lastClose = parseFloat((meta.regularMarketPrice || closes[closes.length - 1] || 0).toFixed(2));
-    const companyName = meta.shortName || meta.longName || ticker.toUpperCase();
+    const companyName = meta.shortName || meta.longName || symbol;
 
     // --- Ridge Regression prediction ---
     const closesOnly = rawData.map(d => d.close);
@@ -52,7 +60,7 @@ Deno.serve(async (req) => {
     const ridge = computeRidgePrediction(closesOnly, volumesArr, ma5Arr, ma20Arr);
     const backtest = walkForwardBacktest(closesOnly, volumesArr, ma5Arr, ma20Arr);
 
-    return Response.json({ chartData, lastClose, companyName, ticker: ticker.toUpperCase(), ridge, backtest });
+    return Response.json({ chartData, lastClose, companyName, ticker: symbol, ridge, backtest });
 });
 
 // ---------- Ridge Regression helpers ----------
